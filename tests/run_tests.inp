@@ -69,5 +69,19 @@ test_FMOLS(Parameters, dataset)
 
 
 
+
+
+function void test_check_sample (void)
+    print "Start testing check_sample()."
+
+    # Given
+
+    # When
+
+    # Then
+end function
+test_check_sample()
+
+
 print "Finished all tests succesfully."
 quit
