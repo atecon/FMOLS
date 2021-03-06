@@ -1,0 +1,34 @@
+include FMOLS.gfn
+# Estimation of the money demand function on the Johansen Danish data
+
+set echo off
+set messages off
+
+open denmark.gdt
+
+spread = IDE-IBO
+
+list xlist=LRY spread
+
+/*
+call of the function with all parameters (deterministics, VAR Prewithening, kernel for covariance estimation,
+bandwidth) left at the default values
+*/
+
+FMOLS(LRM,xlist)
+
+/*
+   Here the function is called looping over all the possible options for the deterministics, VAR Prewithening and
+   the kernel for covariance estimation. The choice of bandwidth for covariance estimation
+   is left at the default option, automatic.
+*/
+
+loop i = 0..1 --quiet                   # models with constant/constant and trend
+    loop j = 0..2 --quiet               # X assumed to be I(1) with drift/trend/quadratic trend
+        loop w = 0 .. 1 --quiet         # with/without VAR Prewithening for covariance estimation
+            loop k = 1..3   --quiet     # different kernels
+                FMOLS(LRM,xlist, i, j, w, k)
+            endloop
+        endloop
+    endloop
+endloop
