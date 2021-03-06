@@ -138,6 +138,64 @@ function void add_column_dimensions (bundle *self)
 end function
 
 
+function matrix get_error_dynamics (const list xlist "in levels",
+                                    const series deter "Deterministics")
+    /* Compute 1st differences and regressor deterministcs on these. */
+
+    matrix uhat
+    list sdx = diff(xlist)
+
+    mols({sdx}, {deter}, &uhat)
+
+    return uhat
+end function
+
+
+function series get_bhat_and_error_coint (const series y "Endogenous in levels",
+                                          const list xlist "levels + deterministics",
+                                          matrix *bhat)
+    /* Compute long-run coefficient vector and return residuals which are equivalent to deviations from long-run relationship. */
+
+    catch ols y xlist --quiet
+    errorif($error, "Level estimation failed. Abort.")
+
+    matrix bhat = $coeff
+    return $uhat
+end function
+
+
+function matrix est_var_model (const matrix m, const int max_lag[1::],
+                               matrix *uhat)
+    /* Estimate a VAR model by mols(). Return coefficient matrix. */
+
+    scalar init = 1 + max_lag      # get rid of initial NAs
+    scalar T = rows(m)
+    matrix p = seq(1, max_lag)
+    matrix m_lags = mlag(m, p, NA)[init:,]
+
+    matrix bhat = mols( m[init:,], m_lags, &uhat )
+    errorif($error, "Prewhitening failed. Abort.")
+
+    return bhat
+end function
+
+
+function scalar compute_bandwidth (const matrix errors,
+                                   const int kernel_id)
+    /* Compute optimal bandwidth.
+    return: scalar value of otpimal bandwidth. */
+
+    scalar T = rows(errors)
+
+    matrix eb = errors[1:(T - 1),]
+    matrix ef = errors[2:T,]
+    matrix ae = ( sumc(eb .* ef)./sumc(eb.^2) )'
+    matrix ee = ef - eb .* ae'
+    matrix se = sqrt( meanc(ee.^2) )'
+    scalar ad = sumc( (se ./ ((1 - ae).^2)).^2 )'
+
+    return bwidth(kernel_id, T, ae, se, ad)
+end function
 
 
 function bundle FMOLS (series ys,
@@ -146,7 +204,7 @@ function bundle FMOLS (series ys,
                        int k2[0:2:1] "DGP of X" {"No drift in X", "Drift in X", "Quadratic trend in X"},
                        bool whiten[1] "VAR Prewithening for covariance estimation",
                        int kernel_id[1:3:1] "Kernel for covariance estimation" {"Quadratic", "Parzen", "Bartlett"},
-                       scalar band[0] "Bandwidth for covariance estimation, default: automatic")
+                       const bool band[FALSE] "Bandwidth for covariance estimation, default: automatic")
     /* */
 
     bundle self = null
@@ -175,10 +233,9 @@ function bundle FMOLS (series ys,
     # OLS regression of levels + deterministics
     list X = det_levels xlist
     smpl (self.t1 + 1) ;            # TODO: why (t1+1) ?
-    ols ys X --quiet
-    matrix bhat_coint = $coeff
-    #  OLS Residuals and regressor innovations  #
-    series errors_coint = $uhat
+    matrix bhat_coint
+    #  OLS Residuals and regressor innovations
+    series errors_coint = get_bhat_and_error_coint(ys, X, &bhat_coint)
     /*
     # OLS regression of levels + deterministics
     matrix xt = self.mx ~ timepoly(self.T, k1)
@@ -192,9 +249,7 @@ function bundle FMOLS (series ys,
     # Note: ols command not applicable as sdx can have multiple columns
     smpl full
     smpl (self.t1 + 1) ;            # TODO: why (t1+1) ?
-    matrix errors_dynamics
-    list sdx = diff(xlist)
-    mols({sdx}, {det_dynamics}, &errors_dynamics)
+    matrix errors_dynamic = get_error_dynamics(xlist, det_dynamics)
     /*
     dx = diff(self.mx)[2:,]
     matrix uhat
@@ -204,19 +259,18 @@ function bundle FMOLS (series ys,
     stop
     #*/
 
-    matrix xdx = {X}'errors_dynamics    # Was ist das inhaltlich?
+    matrix xdx = {X}'errors_dynamic    # Was ist das inhaltlich?
 
     # Concatenate errors
-    matrix errors_stacked = {errors_coint} ~ errors_dynamics
+    matrix errors_stacked = {errors_coint} ~ errors_dynamic
     vcv_errors_stacked = errors_stacked'errors_stacked
 
     # Pre-whiten residuals using VAR(1)
     if whiten
         matrix errors_white
-        errors_stacked_1 = mlag(errors_stacked, 1, NA)[2:,]
-        matrix coeff_white = mols(errors_stacked[2:(self.T - 1),],\
-                                  errors_stacked_1, &errors_white)
-
+        scalar PREWHITENING_LAG = 1        # TODO: move to settings
+        matrix coeff_white = est_var_model(errors_stacked,\
+                                           PREWHITENING_LAG, &errors_white)
         self.Teffective = self.T - 2
     else
         matrix errors_white = errors_stacked
@@ -224,17 +278,15 @@ function bundle FMOLS (series ys,
     endif
 
     # Select Bandwidth
-    if band == 0
-        matrix eb = errors_white[1:(self.Teffective - 1),]
-        matrix ef = errors_white[2:self.Teffective,]
-        matrix ae = (sumc(eb .* ef)./sumc(eb.^2))'
-        matrix ee = ef - eb .* ae'
-        matrix se = sqrt(meanc(ee.^2))'
-        scalar ad = sumc((se ./ ((1 - ae).^2)).^2)'
-        scalar eband = bwidth(kernel_id, self.Teffective, ae, se, ad)
-    else
+    if band == TRUE
         scalar eband = band
+    else
+        # TODO: is this alwayw ensured currently?`
+        assert(rows(errors_white) == self.Teffective)
+        scalar eband = compute_bandwidth(errors_white, kernel_id)
     endif
+
+    * hier weitermachen
 
     # Estimate Covariances #
     matrix kernel_est = compute_kernel(self.Teffective, kernel_id, eband)
