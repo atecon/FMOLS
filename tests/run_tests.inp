@@ -4,7 +4,66 @@ clear
 set assert stop
 include assertion.gfn
 
-include "./src/{{$PACKAGE_NAME}}.inp" --force
+include "./src/FMOLS.inp" --force
+
+
+open denmark.gdt --quiet
+series spread = IDE - IBO
+bundles Parameters = null
+Parameters = Parameters + _(target = "LRM", features = "LRY spread",\
+                            k1 = 0, k2 = 1, whiten = 1, kernel = 1,\
+                            expected_b2 = {3.78441},\
+                            expected_b1 = {1.38237; 3.89836},\
+                            expected_v_vec = {0.016688; -0.025723;\
+                                            -0.10105; 0.0000; 0.19511;\
+                                            0.16602; 0.0000; 0.0000; 0.61259},\
+                            expected_sd_u = 0.050075315\
+                            )
+Parameters = Parameters + _(target = "LRM", features = "LRY spread",\
+                            k1 = 1, k2 = 1, whiten = 0, kernel = 2,\
+                            expected_b2 = {2.4678; -0.0012935},\
+                            expected_b1 = {1.6023; 3.7797},\
+                            expected_v_vec = {0.016817; -0.0054788;\
+                                              -0.10045; -5.6127e-05;\
+                                              0.0000; 0.10797; 0.039773;\
+                                              -5.3193e-05; 0.0000;\
+                                              0.0000; 0.60052; 0.00033044;\
+                                              0.0000; 0.0000; 0.0000;\
+                                              3.8357e-07},\
+                            expected_sd_u = 0.048203225\
+                            )
+
+function void test_FMOLS (const bundles P, const list L)
+    print "Start testing FMOLS()."
+
+    loop foreach i P
+        # Given
+        bundle model = null
+        string target = P[i].target
+        string features = P[i].features
+        list X = @features
+
+        # When
+        model = FMOLS(L.@target, X, P[i].k1, P[i].k2, P[i].whiten, P[i].kernel)
+        matrix v_vec = vec(lower(model.v))
+
+        # Then
+        loop j=1..rows(model.b1)
+            assert_almost_equal_num(model.b1[j], P[i].expected_b1[j], 1e-4)
+        endloop
+        # FIXME: fails with current gretl
+        /*
+        loop j=1..rows(model.b2)
+            assert_almost_equal_num(model.b2[j], P[i].expected_b2[j], 1e-5)
+        endloop
+        */
+        loop j=1..rows(v_vec)
+            assert_almost_equal_num(v_vec[j], P[i].expected_v_vec[j], 1e-3)
+        endloop
+        assert_almost_equal_num(sd(model.u), P[i].expected_sd_u, 1e-5)
+    endloop
+end function
+test_FMOLS(Parameters, dataset)
 
 
 
