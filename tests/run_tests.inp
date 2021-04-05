@@ -7,20 +7,85 @@ include assertion.gfn
 include "./src/FMOLS.inp" --force
 
 
+bundles Params = null
+Params = Params + _(type_kernel = "quadratic", expected = 1)
+Params = Params + _(type_kernel = "parzen", expected = 2)
+Params = Params + _(type_kernel = "bartlett", expected = 3)
+
+function void test_get_kernel_id (const bundles P)
+    print "Start testing get_kernel_id()."
+
+    loop foreach i P
+        # Given + When
+        actual = get_kernel_id(P[i].type_kernel)
+
+        # Then
+        assert(actual == P[i].expected)
+    endloop
+end function
+test_get_kernel_id(Params)
+
+
+bundles Params = null
+Params = Params + _(type = "constant", expected = 0)
+Params = Params + _(type = "linear_trend", expected = 1)
+Params = Params + _(type = "quadratic_trend", expected = 2)
+
+function void test_get_trend_powermax (const bundles P)
+    print "Start testing get_trend_powermax()."
+
+    loop foreach i P
+        # Given + When
+        actual = get_trend_powermax(P[i].type)
+
+        # Then
+        assert(actual == P[i].expected)
+    endloop
+end function
+test_get_trend_powermax(Params)
+
+
+bundles Params = null
+Params = Params + _(type = TRUE, expected = " Pre-Whitened")
+Params = Params + _(type = FALSE, expected = " Not Pre-Whitened")
+function void test_msg_prewhiten (const bundles P)
+    print "Start testing msg_prewhiten()."
+
+    loop foreach i P
+        # Given + When
+        actual = msg_prewhiten(P[i].type)
+
+        # Then
+        assert(actual == P[i].expected)
+    endloop
+end function
+test_msg_prewhiten(Params)
+
+
+
+
 open denmark.gdt --quiet
 series spread = IDE - IBO
+list xlist = LRY spread
 bundles Parameters = null
-Parameters = Parameters + _(target = "LRM", features = "LRY spread",\
-                            k1 = 0, k2 = 1, whiten = 1, kernel = 1,\
+Parameters = Parameters + _(type_deterministic = "constant",\
+                            type_dgp_x = "constant",\
+                            do_prewhite = TRUE,\
+                            type_kernel = "quadratic",\
+                            verbose = FALSE,\
                             expected_b2 = {3.78441},\
                             expected_b1 = {1.38237; 3.89836},\
                             expected_v_vec = {0.016688; -0.025723;\
                                             -0.10105; 0.0000; 0.19511;\
                                             0.16602; 0.0000; 0.0000; 0.61259},\
-                            expected_sd_u = 0.050075315\
+                            expected_sd_ec = 0.061586866\
                             )
-Parameters = Parameters + _(target = "LRM", features = "LRY spread",\
-                            k1 = 1, k2 = 1, whiten = 0, kernel = 2,\
+
+Parameters = Parameters + _(type_deterministic = "linear_trend",\
+                            type_dgp_x = "constant",\
+                            do_prewhite = FALSE,\
+                            type_kernel = "parzen",\
+                            verbose = FALSE,\
                             expected_b2 = {2.4678; -0.0012935},\
                             expected_b1 = {1.6023; 3.7797},\
                             expected_v_vec = {0.016817; -0.0054788;\
@@ -30,56 +95,42 @@ Parameters = Parameters + _(target = "LRM", features = "LRY spread",\
                                               0.0000; 0.60052; 0.00033044;\
                                               0.0000; 0.0000; 0.0000;\
                                               3.8357e-07},\
-                            expected_sd_u = 0.048203225\
+                            expected_sd_ec = 0.071308584\
                             )
-
-function void test_FMOLS (const bundles P, const list L)
+function void test_FMOLS (const bundles P, const series y, const list L)
     print "Start testing FMOLS()."
 
     loop foreach i P
+        print i
         # Given
         bundle model = null
-        string target = P[i].target
-        string features = P[i].features
-        list X = @features
+        #string target = P[i].target
+        #string features = P[i].features
+        #list X = @features
 
         # When
-        model = FMOLS(L.@target, X, P[i].k1, P[i].k2, P[i].whiten, P[i].kernel)
+        model = FMOLS(y, L, P[i])
         matrix v_vec = vec(lower(model.vcv))
 
         # Then
         loop j=1..rows(model.bhat_coint)
-            assert_almost_equal_num(model.bhat_coint[j], P[i].expected_b1[j], 1e-4)
+            assert_almost_equal_num(model.bhat_coint[j],\
+                                    P[i].expected_b1[j], 1e-4)
         endloop
 
         loop j=1..rows(model.bhat_deter)
-            assert_almost_equal_num(model.bhat_deter[j], P[i].expected_b2[j], 1e-5)
+            assert_almost_equal_num(model.bhat_deter[j],\
+                                    P[i].expected_b2[j], 1e-5)
         endloop
 
         loop j=1..rows(v_vec)
             assert_almost_equal_num(v_vec[j], P[i].expected_v_vec[j], 1e-3)
         endloop
-        assert_almost_equal_num(sd(model.uhat), P[i].expected_sd_u, 1e-5)
+        assert_almost_equal_num(sd(model.ec), P[i].expected_sd_ec, 1e-5)
     endloop
 end function
-test_FMOLS(Parameters, dataset)
+test_FMOLS(Parameters, LRM, xlist)
 
-
-
-
-
-
-
-function void test_check_sample (void)
-    print "Start testing check_sample()."
-
-    # Given
-
-    # When
-
-    # Then
-end function
-test_check_sample()
 
 
 print "Finished all tests succesfully."

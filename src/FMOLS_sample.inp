@@ -20,7 +20,13 @@ ols LRM const xlist
 bundle model = FMOLS(LRM, xlist)
 print model
 
-bundle model = FMOLS(LRM, xlist, 1, 1, 0, 2)
+
+bundle opts = _(\
+                type_deterministic = "linear_trend",\
+                type_dgp_x = "constant",\
+                do_prewhite = FALSE,\
+                type_kernel = "parzen")
+bundle model = FMOLS(LRM, xlist, opts)
 print model
 stop
 

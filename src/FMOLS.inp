@@ -1,18 +1,48 @@
-function matrix timepoly (scalar T,
-                          scalar maxpower)
-    /* */
+function matrix timepoly (int T[1::],
+                          int maxpower[0::])
+    /* Compute constant and (non-)linear trend. */
 
-    hT = floor(T / 2)
-    even = T % 2
-    ret = ones(T, 1)
+    strings clabels = defarray("intercept")
+    matrix ret = ones(T, 1)
 
     if maxpower > 0
-        trend = seq((1 - even - hT), hT)'
-        # trend = seq(1, self.T)'
-        ret ~= trend .^ seq(1, maxpower)
+        scalar hT = floor(T / 2)
+        scalar even = T % 2
+        matrix trend = seq((1 - even - hT), hT)'
+        ret ~= trend.^seq(1, maxpower)
+
+        loop i=1..maxpower
+            clabels = clabels + sprintf("trend_pow_%d", $i)
+        endloop
+    endif
+
+    cnameset(ret, clabels)
+
+    return ret
+end function
+
+function string msg_type_dgp_x (const string type)
+    /* code description
+    return: type, description */
+
+    if type == "constant"
+        ret = " Constant"
+    elif type == "linear_trend"
+        ret = " Constant and trend"
+    elif type == "quadratic_trend"
+        ret = " Constant, linear and quadratic trend"
     endif
 
     return ret
+end function
+
+
+function string msg_prewhiten (const bool do_prewhite)
+    if do_prewhite
+        return " Pre-Whitened"
+    else
+        return " Not Pre-Whitened"
+    endif
 end function
 
 
@@ -20,46 +50,26 @@ function void print_results (const bundle self, const bundle model)
     /* Print estimation results. */
 
 
-    matrix b1m = model.bhat_coint ~ model.se[1:self.cols_mx]
-    matrix b2m = model.bhat_deter ~ model.se[(self.cols_mx + 1):]
+    matrix b1m = model.bhat_coint ~ model.se_coint
+    matrix b2m = model.bhat_deter ~ model.se_deter
 
     string names_xlist = self.names_xlist
-    string names_deterministics = self.names_deterministics
+    string names_deterministics = strsub(self.type_deterministic, "_", " ")
+    string msg_type_dgp_x = msg_type_dgp_x(self.type_dgp_x)
+    string msg_whiten = msg_prewhiten(self.do_prewhite)
+    string msg_kernel = sprintf(" %s", toupper(self.type_kernel))
 
-    if self.k2 == 0
-        msg_deterministic = " Constant"
-    elif self.k2 == 1
-        msg_deterministic = " Constant and trend"
-    elif self.k2 == 2
-        msg_deterministic = " Constant, linear and quadratic trend"
-    endif
-
-    if self.whiten
-        msg_whiten = " Pre-Whitened"
-    else
-        msg_whiten = " Not Pre-Whitened"
-    endif
-
-    if self.kernel_id == 1
-        msg_kernel = " Quadratic Spectral"
-    elif self.kernel_id == 2
-        msg_kernel = " Parzen"
-    elif self.kernel_id == 3
-        msg_kernel = " Bartlett"
-    endif
-
-    if self.band == 0
+    if self.bandwidth == -1
         msg_band = sprintf(" Automatic, estimate = %5.3g\n", self.bandwidth)
-    elif self.band < 0
-        msg_band = " Preset at 0"
     else
-        msg_band = sprintf(" Preset at = %5.3g\n", self.bandwidth)
+        msg_band = sprintf(" Preset at = %2.3g\n", self.bandwidth)
     endif
-
 
     print  "======================================================================"
-    printf "Fully Modified Least Squares Regression (sample size = %d)\n",\
-        self.T
+    print "Fully Modified Least Squares Regression"
+    printf "using observations %s-%s (T = %d)\n", obslabel(self.t1),\
+        obslabel(self.t2), self.T
+    printf "Dependent variable: %s\n", self.name_endogenous
     print  "_____________________________________________________________________"
     print  ""
     print  "  I(1) variables"
@@ -67,64 +77,95 @@ function void print_results (const bundle self, const bundle model)
     print ""
     print "Deterministic terms"
     modprint b2m names_deterministics
-    print ""
     printf "Assumed regressor deterministics:"
-    print msg_deterministic
+    print msg_type_dgp_x
 
-    printf "Method of Estimation of Covariance Parameters:"
+    printf "Method of estimation of covariance parameters:"
     print msg_whiten
 
     printf "Kernel:"
     print msg_kernel
 
     printf "Bandwidth:"
-    print msg_kernel
+    print msg_band
 
     print  "======================================================================\n\n"
 end function
 
 
-function scalar bwidth (int kernel_id,
+function scalar get_kernel_id (const string name)
+    /* Map from kernel nale to unique ID. */
+
+    bundle map = _(\
+                    quadratic = 1,\
+                    parzen = 2,\
+                    bartlett = 3\
+                )
+
+    return map[name]
+end function
+
+
+function scalar bwidth (const string type_kernel,
                         int T,
                         const matrix ae,
                         const matrix se,
                         const scalar ad)
     /* Compute bandwidth. */
 
-    if kernel_id == 1       # Quadratic Spectral
+    if get_kernel_id(type_kernel) == 1       # Quadratic Spectral
         scalar coeff_white = 4 * ( sumc((ae.*se./((1-ae).^4)).^2) ) / ad
         eband = 1.3221 * ( (coeff_white * T)^.2 )
-    elif kernel_id == 2     # Parzen
+    elif get_kernel_id(type_kernel) == 2     # Parzen
         scalar coeff_white = 4 * ( sumc((ae.*se./((1-ae).^4)).^2) ) / ad
         eband = 2.6614 * ( (coeff_white * T)^.2 )
-    elif kernel_id == 3     # Bartlett
+    elif get_kernel_id(type_kernel) == 3     # Bartlett
         scalar coeff_white = 4 * ( sumc((ae.*se./(((1-ae).^3).*(1+ae))).^2) )' / ad
         eband = 1.1447 * ( (coeff_white * T)^(1/3) )
     else
-        eband = NA
+        funcerr sprintf("Kernel type '%s' is not known. Abort.", type_kernel)
     endif
 
     return eband
 end function
 
 
-function matrix compute_kernel (int T,
-                                int kernel_id,
-                                scalar eband)
-    /* */
+function scalar compute_bandwidth (const matrix mat,
+                                   const string type_kernel)
+    /* Compute optimal bandwidth.
+    return: scalar value of otpimal bandwidth. */
 
-    matrix jb = seq(1, (T-1)) ./ eband
+    scalar T = rows(mat)
 
-    if kernel_id == 1   # Quadratic Spectral Kernel #
+    matrix eb = mat[1:(T-1),]
+    matrix ef = mat[2:T,]
+    matrix ae = ( sumc(eb .* ef)./sumc(eb.^2) )'
+    matrix ee = ef - eb .* ae'
+    matrix se = sqrt( meanc(ee.^2) )'
+    scalar ad = sumc( (se ./ ((1 - ae).^2)).^2 )'
+
+    return bwidth(type_kernel, T, ae, se, ad)
+end function
+
+
+
+function matrix compute_kernel (int T[1::],
+                                const string type_kernel,
+                                scalar bandwidth)
+    /* Compute kernel-based weights. */
+
+    matrix jb = seq(1, (T-1)) ./ bandwidth
+
+    if get_kernel_id(type_kernel) == 1   # Quadratic Spectral
         jband = jb * 1.2 * $pi
         matrix kernel_est = 3 * ((sin(jband)./jband - cos(jband))./(jband.^2))
-    elif kernel_id == 2     #  Parzen kernel_id
+    elif get_kernel_id(type_kernel) == 2     #  Parzen
         matrix kernel_est = (1 - (jb.^2)*6 + (jb.^3)*6).*(jb .<= 0.5)
         kernel_est = kernel_est + 2 * ((1-jb).^3) .* ((jb .<=1) && (jb .> 0.5))
-    elif kernel_id == 3     #  Bartlett kernel_id
+    elif get_kernel_id(type_kernel) == 3     #  Bartlett
         matrix kernel_est = (1-jb).*(jb .<= 1)
     else
-        matrix kernel_est = {}
+        funcerr sprintf("Kernel type '%s' is not known. Abort.", type_kernel)
     endif
 
     return vec(kernel_est)
@@ -148,17 +189,16 @@ function bundle check_sample (const list L)
 end function
 
 
-function void add_column_dimensions (bundle *self)
+function void add_column_dimensions (const list xlist, bundle *self)
     /*  Determine column dimensions of matrices. */
 
-    scalar self.cols_my = cols(self.my)
-    scalar self.cols_mx = cols(self.mx)
-    scalar self.cols_mymx = self.cols_my + self.cols_mx
+    scalar self.cols_mx = nelem(xlist)
+    scalar self.cols_mymx = 1 + self.cols_mx
 end function
 
 
 function matrix get_shortrun_innovations (const list xlist "in levels",
-                                          const series deter "Deterministics")
+                                          const list deter "Deterministics")
     /* Compute short-term innovations: deviations of 1st-differences from deterministics. */
 
     list sdx = diff(xlist)
@@ -172,8 +212,7 @@ end function
 
 
 function series get_longrun_innovations (const series y "Endogenous in levels",
-                                         const list xlist "levels + deterministics",
-                                         matrix *bhat)
+                                         const list xlist "levels + deterministics")
     /* Compute long-run coefficient vector and return residuals which are equivalent to deviations from long-run relationship. */
 
     smpl y xlist --no-missing
@@ -181,7 +220,6 @@ function series get_longrun_innovations (const series y "Endogenous in levels",
     catch ols y xlist --quiet
     errorif($error, "Level estimation failed. Abort.")
 
-    matrix bhat = $coeff
     return $uhat
 end function
 
@@ -203,145 +241,138 @@ function matrix est_var_model (const matrix m,
 end function
 
 
-function scalar compute_bandwidth (const matrix mat,
-                                   const int kernel_id)
-    /* Compute optimal bandwidth.
-    return: scalar value of otpimal bandwidth. */
+function bundle fmols_defaults (void)
+    /*  */
 
-    scalar T = rows(mat)
+    bundle B
 
-    matrix eb = mat[1:(T-1),]
-    matrix ef = mat[2:T,]
-    matrix ae = ( sumc(eb .* ef)./sumc(eb.^2) )'
-    matrix ee = ef - eb .* ae'
-    matrix se = sqrt( meanc(ee.^2) )'
-    scalar ad = sumc( (se ./ ((1 - ae).^2)).^2 )'
+    string B.type_deterministic = "constant"
+    string B.type_dgp_x = "constant"
+    string B.type_kernel = "quadratic"
+    scalar B.do_prewhite = TRUE
+    scalar B.prewhitening_lag = 1
+    scalar B.bandwidth = -1
+    scalar B.verbose = TRUE
 
-    return bwidth(kernel_id, T, ae, se, ad)
+    return B
+end function
+
+
+function scalar get_trend_powermax (const string type)
+    /* Map deterministics to maximum degree (power) of trend variable. */
+
+    bundle map = _(\
+                        constant = 0,\
+                        linear_trend = 1,\
+                        quadratic_trend = 2\
+                    )
+
+    return map[type]
 end function
 
 
 function bundle FMOLS (const series ys,
                        const list xlist,
-                       int k1[0:1:0] "Model deterministics" {"Constant", "Constant and Trend"},
-                       int k2[0:2:1] "DGP of X" {"No drift in X", "Drift in X", "Quadratic trend in X"},
-                       bool whiten[TRUE] "VAR Prewithening for covariance estimation",
-                       int kernel_id[1:3:1] "Kernel for covariance estimation" {"Quadratic", "Parzen", "Bartlett"},
-                       bool band[FALSE] "Bandwidth for covariance estimation, default: automatic",
-                       const bool verbose[TRUE])
+                       const bundle opts[null])
     /* Oublic function calling all necessary steps. */
 
     # TODO: Rename parameters
 
-    bundle self = null
+    bundle self = fmols_defaults()
+
+    if exists(opts)
+        self = opts + self
+    endif
+
+    self.type_deterministic = tolower(self.type_deterministic)
+    self.type_dgp_x = tolower(self.type_dgp_x)
+    self.type_kernel = tolower(self.type_kernel)
+    string self.name_endogenous = argname(ys)
+    string self.names_xlist = varname(xlist)
 
     self = self + check_sample(deflist(ys, xlist))
     smpl self.t1 self.t2
     scalar self.T = $nobs
-    scalar self.k1 = k1
-    scalar self.k2 = k2
-    scalar self.whiten = whiten
-    scalar self.kernel_id = kernel_id
-    scalar self.band = band
-    string self.names_xlist = varname(xlist)
-    string self.names_deterministics = self.k1 ==1 ? "constant,trend" : \
-                                       "constant"
+    add_column_dimensions(xlist, &self)
 
-    # create matrices from input series
-    matrix self.my = {ys}
-    matrix self.mx = {xlist}
+    list det_levels
+    list det_dynamics
+    matrix mtmp = timepoly($nobs,\
+                           get_trend_powermax(self.type_deterministic))
+    loop i=1..cols(mtmp)
+        det_levels += genseries(sprintf("%s", cnameget(mtmp)[i]), mtmp[,i])
+    endloop
 
-    add_column_dimensions(&self)
-
-    # As we use series instead of vectors, we don't need to adjust smpl
-    series det_levels = timepoly($nobs, self.k1)
-    #smpl (self.t1 + 1) ;            # TODO: why (t1+1) ?
-    series det_dynamics  = timepoly($nobs, xmax(0, (self.k2 - 1)))
-    smpl full           # TODO: seems that can be droppped later
+    # one obs. lost due to differencing for changes in levels
+    smpl (self.t1+1) ;
+    matrix mtmp = timepoly($nobs, get_trend_powermax(self.type_dgp_x))
+    loop i=1..cols(mtmp)
+        det_dynamics += genseries(sprintf("%s_dyn", cnameget(mtmp)[i]),\
+                                  mtmp[,i])
+    endloop
 
     # OLS regression of levels + deterministics
     list xlist_deter = xlist det_levels
-    matrix bhat_coint
-    #  OLS Residuals and regressor innovations
-    series lrun_innovations = get_longrun_innovations(ys, xlist_deter, &bhat_coint)
-    /*
-    # OLS regression of levels + deterministics
-    matrix xt = self.mx ~ timepoly(self.T, k1)
-    matrix y2 = self.my[2:,]
-    matrix {xlist_deter} = xt[2:,]
-    matrix bhat_coint = mols(y2, {xlist_deter})
-    bhat_coint
-    */
+    smpl (self.t1 + 1) ;  # current implementation uses T-1 obs.
+    series lrun_innovations = get_longrun_innovations(ys, xlist_deter)
 
     # Construct errors of dynamics - has (T-1) observations due to differencing
     # Note: ols command not applicable as sdx can have multiple columns
-    smpl full               # TODO: drop later?
+    smpl full
     matrix self.srun_innovations = get_shortrun_innovations(xlist, det_dynamics)
-    /*
-    dx = diff(self.mx)[2:,]
-    matrix uhat
-    # regressor innovation
-    mols(dx, {det_dynamics}, &uhat)
-    print su2 uhat --range=1:10
-    stop
-    #*/
 
-
-    # Was ist das inhaltlich?
-    smpl +1 ;
+    smpl (self.t1 + 1) ;
     matrix xdx = {xlist_deter}'self.srun_innovations
 
     # Concatenate errors
     matrix innovations = {lrun_innovations} ~ self.srun_innovations
-    vcv_errors_stacked = innovations'innovations
+    vcv_innovations = innovations'innovations
 
-    if whiten                   # Pre-whiten residuals using VAR(p)
-        matrix errors_white                 # TODO: initialize at the beginning
-        scalar PREWHITENING_LAG = 1         # TODO: move to settings
-        matrix coeff_white = est_var_model(innovations,\
-                                           PREWHITENING_LAG, &errors_white)
+    if self.do_prewhite             # Pre-white residuals using VAR(p)
+        matrix innovations_white
+        matrix coeff_white = est_var_model(innovations, self.prewhitening_lag,\
+                                           &innovations_white)
     else
-        matrix errors_white = innovations
+        matrix innovations_white = innovations
     endif
-    self.Teffective = rows(errors_white)
+    scalar self.Teffective = rows(innovations_white)
 
-    # Select Bandwidth # TODO: argument should be 'auto_bandwidth[FALSE]'
-    if band == TRUE
-        # FIXME: Why is bandwidth == band if 'band' is a boolean?
-        scalar self.bandwidth = band
-    else
-        scalar self.bandwidth = compute_bandwidth(errors_white, kernel_id)
+    if self.bandwidth == -1
+        scalar self.bandwidth = compute_bandwidth(innovations_white,\
+                                                  self.type_kernel)
     endif
 
     # Estimate covariances
-    matrix kernel_est = compute_kernel(self.Teffective, kernel_id,\
+    matrix kernel_est = compute_kernel(self.Teffective, self.type_kernel,\
                                        self.bandwidth)
-    matrix sigma = errors_white'errors_white
+    matrix sigma = innovations_white'innovations_white
 
-    # lambda is the long-run covariance matrix
-    matrix lambda = longrun_cov(kernel_est, errors_white)
+    # long-run covariance matrix
+    matrix lambda = longrun_cov(kernel_est, innovations_white)
     # TODO: Could longrun_cov be replaced by?
     /*
     set hac_prewhiten on
-    set hac_lag nw1 #PREWHITENING_LAG
+    set hac_lag nw1 #self.prewhitening_lag
     set hac_kernel qs
-    matrix my_lambda = lrcovar(errors_white, FALSE)
+    matrix my_lambda = lrcovar(innovations_white, FALSE)
     */
 
     matrix self.delta = sigma + lambda
     matrix self.omega = self.delta + lambda'
 
-    if whiten           # Recolor
+    if self.do_prewhite           # Recolor
         matrix ai
         matrix self.omega = recolor_omega(self.omega, coeff_white, &ai)
         matrix self.delta = recolor_delta(self.delta, coeff_white, ai,\
-                                          vcv_errors_stacked)
+                                          vcv_innovations)
     endif
 
     bundle model = fmols(ys, xlist_deter, self)
     model.T = self.T
+    model.name_endogenous = argname(ys)
+    model.names_xlist = varnames(xlist)
 
-    if verbose
+    if self.verbose
         print_results(self, model)
     endif
 
@@ -354,7 +385,7 @@ function bundle fmols (const series ys,
                        const bundle self)
     /* Actual FMOLS estimator. */
 
-    smpl ($tmax - self.Teffective) ;
+    smpl (1 + self.t1) ;
 
     bundle B
     scalar n_yxlist = self.cols_mymx
@@ -363,24 +394,32 @@ function bundle fmols (const series ys,
     g = mols(self.omega[2:n_yxlist, 1], self.omega[2:n_yxlist, 2:n_yxlist])
 
     delta_g = self.delta[2:n_yxlist, 1] - self.delta[2:n_yxlist, 2:n_yxlist] * g
-    delta_g |= zeros((self.k1 + 1), self.cols_my)    # this is "M*"
+    scalar k = get_trend_powermax(self.type_deterministic)
+    delta_g |= zeros((k + 1), 1)    # this is "M*"
 
     # Clean "y"
+    series mask = 1
+    smpl full
     matrix B.ystar = ys - self.srun_innovations * g
+    smpl mask == 1 --restrict
 
     # Cointegrating vector based on clean "y"
     matrix m_xlist_deter = {xlist_deter}
     matrix xxi = invpd(m_xlist_deter'm_xlist_deter)
 
-    matrix bhat_coint = xxi * (m_xlist_deter'B.ystar - delta_g)
-    matrix B.bhat_coint = bhat_coint[1:n_xlist]
-    matrix B.bhat_deter = bhat_coint[(n_xlist + 1):]
+    matrix bhat = xxi * (m_xlist_deter'B.ystar - delta_g)
+    matrix B.bhat_coint = bhat[1:n_xlist]
+    matrix B.bhat_deter = bhat[(n_xlist + 1):]
 
     #  Covariance matrix
-    matrix sg = (self.omega[1,1] - self.omega[1,2:n_yxlist] * g) / ($nobs - 1)
+    matrix sg = (self.omega[1,1] - self.omega[1,2:n_yxlist] * g) / $nobs
     matrix B.vcv = xxi * sg
-    matrix B.uhat = B.ystar - {xlist_deter} * bhat_coint
-    matrix B.se = sqrt(diag(B.vcv))
+
+    matrix se = sqrt(diag(B.vcv))
+    matrix B.se_coint = se[1:n_xlist]
+    matrix B.se_deter = se[(n_xlist + 1):]
+
+    matrix B.ec = B.ystar - {xlist_deter} * bhat  # error-correction term
 
     return B
 end function
@@ -389,9 +428,9 @@ end function
 function matrix recolor_delta (const matrix delta,
                                const matrix coeff_white "pre-whitened coeffs.",
                                const matrix ai,
-                               const matrix vcv_errors_stacked)
+                               const matrix vcv_innovations)
     /*  */
-    return ai'delta * ai - ai'(coeff_white'vcv_errors_stacked)
+    return ai'delta * ai - ai'(coeff_white'vcv_innovations)
 end function
 
 
