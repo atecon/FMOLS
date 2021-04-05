@@ -22,8 +22,7 @@ function matrix timepoly (int T[1::],
 end function
 
 function string msg_type_dgp_x (const string type)
-    /* code description
-    return: type, description */
+    /* Map selected type to unique ID. */
 
     if type == "constant"
         ret = " Constant"
@@ -38,6 +37,7 @@ end function
 
 
 function string msg_prewhiten (const bool do_prewhite)
+    /* For printing only. */
     if do_prewhite
         return " Pre-Whitened"
     else
@@ -48,7 +48,6 @@ end function
 
 function void print_results (const bundle self, const bundle model)
     /* Print estimation results. */
-
 
     matrix b1m = model.bhat_coint ~ model.se_coint
     matrix b2m = model.bhat_deter ~ model.se_deter
@@ -94,7 +93,7 @@ end function
 
 
 function scalar get_kernel_id (const string name)
-    /* Map from kernel nale to unique ID. */
+    /* Map kernel type to unique ID. */
 
     bundle map = _(\
                     quadratic = 1,\
@@ -123,7 +122,7 @@ function scalar bwidth (const string type_kernel,
         scalar coeff_white = 4 * ( sumc((ae.*se./(((1-ae).^3).*(1+ae))).^2) )' / ad
         eband = 1.1447 * ( (coeff_white * T)^(1/3) )
     else
-        funcerr sprintf("Kernel type '%s' is not known. Abort.", type_kernel)
+        funcerr sprintf("Kernel type '%s' not known. Abort.", type_kernel)
     endif
 
     return eband
@@ -133,7 +132,7 @@ end function
 function scalar compute_bandwidth (const matrix mat,
                                    const string type_kernel)
     /* Compute optimal bandwidth.
-    return: scalar value of otpimal bandwidth. */
+    return: scalar value of optimal bandwidth. */
 
     scalar T = rows(mat)
 
@@ -173,16 +172,16 @@ end function
 
 
 function bundle check_sample (const list L)
-    /*  */
+    /*  Check for missing values and return sample start and end observations.*/
 
     scalar Told = $nobs
     smpl L --contiguous
     scalar Tnew = $nobs
 
     scalar Tdiff = Told - Tnew
-    if Tdiff
-        Warn(sprintf("Dropped %d observations due to missing values.", Tdiff))
-        Info("Sample range: %s to %s", obslabe($t1), obslabe($t2))
+    if Tdiff && self.verbose
+        printf "\nWarning: Dropped %d observations due to missing values.\n", Tdiff
+        printf "\nInfo: Sample range: %s to %s.\n", obslabe($t1), obslabe($t2)
     endif
 
     return _(t1 = $t1, t2 = $t2)
@@ -242,7 +241,7 @@ end function
 
 
 function bundle fmols_defaults (void)
-    /*  */
+    /*  set and return default values. */
 
     bundle B
 
@@ -274,9 +273,7 @@ end function
 function bundle FMOLS (const series ys,
                        const list xlist,
                        const bundle opts[null])
-    /* Oublic function calling all necessary steps. */
-
-    # TODO: Rename parameters
+    /* Public function calling all necessary steps. */
 
     bundle self = fmols_defaults()
 
@@ -313,10 +310,10 @@ function bundle FMOLS (const series ys,
 
     # OLS regression of levels + deterministics
     list xlist_deter = xlist det_levels
-    smpl (self.t1 + 1) ;  # current implementation uses T-1 obs.
+    smpl (self.t1 + 1) ;
     series lrun_innovations = get_longrun_innovations(ys, xlist_deter)
 
-    # Construct errors of dynamics - has (T-1) observations due to differencing
+    # Construct errors of dynamics: Has (T-1) observations due to differencing
     # Note: ols command not applicable as sdx can have multiple columns
     smpl full
     matrix self.srun_innovations = get_shortrun_innovations(xlist, det_dynamics)
@@ -458,21 +455,3 @@ function matrix longrun_cov (const matrix kernel_est "weights",
 
     return lambda
 end function
-
-
-function void Debug (const string s)
-    printf "\Debug: %s\n", s
-end function
-
-function void Info (const string s)
-    printf "\nInfo: %s\n", s
-end function
-
-function void Warn (const string s)
-    printf "\nWarning: %s\n", s
-end function
-
-function void Error (const string s)
-    printf "\nError: %s\n", s
-end function
-
