@@ -45,22 +45,21 @@ function void test_FMOLS (const bundles P, const list L)
 
         # When
         model = FMOLS(L.@target, X, P[i].k1, P[i].k2, P[i].whiten, P[i].kernel)
-        matrix v_vec = vec(lower(model.v))
+        matrix v_vec = vec(lower(model.vcv))
 
         # Then
-        loop j=1..rows(model.b1)
-            assert_almost_equal_num(model.b1[j], P[i].expected_b1[j], 1e-4)
+        loop j=1..rows(model.bhat_coint)
+            assert_almost_equal_num(model.bhat_coint[j], P[i].expected_b1[j], 1e-4)
         endloop
-        # FIXME: fails with current gretl
-        /*
-        loop j=1..rows(model.b2)
-            assert_almost_equal_num(model.b2[j], P[i].expected_b2[j], 1e-5)
+
+        loop j=1..rows(model.bhat_deter)
+            assert_almost_equal_num(model.bhat_deter[j], P[i].expected_b2[j], 1e-5)
         endloop
-        */
+
         loop j=1..rows(v_vec)
             assert_almost_equal_num(v_vec[j], P[i].expected_v_vec[j], 1e-3)
         endloop
-        assert_almost_equal_num(sd(model.u), P[i].expected_sd_u, 1e-5)
+        assert_almost_equal_num(sd(model.uhat), P[i].expected_sd_u, 1e-5)
     endloop
 end function
 test_FMOLS(Parameters, dataset)
