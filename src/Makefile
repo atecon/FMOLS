@@ -1,4 +1,4 @@
-PKG = ${{PACKAGE_NAME}}
+PKG = FMOLS
 
 $(PKG).gfn: $(PKG).inp $(PKG).spec $(PKG)_sample.inp
 	gretlcli --makepkg $(PKG).inp
