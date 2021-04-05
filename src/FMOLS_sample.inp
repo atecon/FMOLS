@@ -3,7 +3,6 @@ set verbose off
 
 open denmark.gdt
 
-
 set workdir "/home/at/git/FMOLS"
 include "./src/FMOLS.inp" --force
 
@@ -16,7 +15,9 @@ call of the function with all parameters (deterministics, VAR Prewithening, kern
 bandwidth) left at the default values
 */
 
-bundle model = FMOLS(LRM,xlist)
+ols LRM const xlist
+
+bundle model = FMOLS(LRM, xlist)
 print model
 
 bundle model = FMOLS(LRM, xlist, 1, 1, 0, 2)

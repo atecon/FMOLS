@@ -15,97 +15,116 @@ function matrix timepoly (scalar T,
     return ret
 end function
 
-function void print_results (scalar t,
-                             string regnames,
-                             matrix b1m,
-                             matrix b2m,
-                             int k1,
-                             int k2,
-                             int whiten,
-                             int kernel_id,
-                             int band,
-                             scalar eband)
-    string detnames = k1 ? "constant,trend" : "constant"
+
+function void print_results (const bundle self, const bundle model)
+    /* Print estimation results. */
+
+
+    matrix b1m = model.bhat_coint ~ model.se[1:self.cols_mx]
+    matrix b2m = model.bhat_deter ~ model.se[(self.cols_mx + 1):]
+
+    string names_xlist = self.names_xlist
+    string names_deterministics = self.names_deterministics
+
+    if self.k2 == 0
+        msg_deterministic = " Constant"
+    elif self.k2 == 1
+        msg_deterministic = " Constant and trend"
+    elif self.k2 == 2
+        msg_deterministic = " Constant, linear and quadratic trend"
+    endif
+
+    if self.whiten
+        msg_whiten = " Pre-Whitened"
+    else
+        msg_whiten = " Not Pre-Whitened"
+    endif
+
+    if self.kernel_id == 1
+        msg_kernel = " Quadratic Spectral"
+    elif self.kernel_id == 2
+        msg_kernel = " Parzen"
+    elif self.kernel_id == 3
+        msg_kernel = " Bartlett"
+    endif
+
+    if self.band == 0
+        msg_band = sprintf(" Automatic, estimate = %5.3g\n", self.bandwidth)
+    elif self.band < 0
+        msg_band = " Preset at 0"
+    else
+        msg_band = sprintf(" Preset at = %5.3g\n", self.bandwidth)
+    endif
+
+
     print  "======================================================================"
-    printf "Fully Modified Least Squares Regression (sample size = %d)\n", t
+    printf "Fully Modified Least Squares Regression (sample size = %d)\n",\
+        self.T
     print  "_____________________________________________________________________"
     print  ""
     print  "  I(1) variables"
-    modprint b1m regnames
+    modprint b1m names_xlist
     print ""
     print "Deterministic terms"
-    modprint b2m detnames
+    modprint b2m names_deterministics
     print ""
     printf "Assumed regressor deterministics:"
-    if k2 == 0
-        printf " Constant\n"
-    elif k2 == 1
-        printf " Constant and trend\n"
-    elif k2 == 2
-        printf " Constant, linear and quadratic trend\n"
-    endif
+    print msg_deterministic
+
     printf "Method of Estimation of Covariance Parameters:"
-    if whiten
-        printf " Pre-Whitened\n"
-    else
-        printf " Not Pre-Whitened\n"
-    endif
+    print msg_whiten
+
     printf "Kernel:"
-    if kernel_id == 1
-        printf " Quadratic Spectral\n"
-    elif kernel_id == 2
-        printf " Parzen\n"
-    elif kernel_id == 3
-        printf " Bartlett\n"
-    endif
+    print msg_kernel
+
     printf "Bandwidth:"
-    if band == 0
-        printf " Automatic, estimate = %5.3g\n", eband
-    elif band < 0
-        printf " Preset at 0\n"
-    else
-        printf " Preset at = %5.3g\n", eband
-    endif
-    print  "======================================================================"
-    printf "\n\n"
+    print msg_kernel
+
+    print  "======================================================================\n\n"
 end function
+
 
 function scalar bwidth (int kernel_id,
                         int T,
                         const matrix ae,
                         const matrix se,
                         const scalar ad)
-    if kernel_id == 1 # Quadratic Spectral
-        scalar coeff_white = 4*(sumc((ae.*se./((1-ae).^4)).^2))/ad
-        eband = 1.3221*((coeff_white*T)^.2)
-    elif kernel_id == 2 # Parzen
-        scalar coeff_white = 4*(sumc((ae.*se./((1-ae).^4)).^2))/ad
-        eband = 2.6614*((coeff_white*T)^.2)
-    elif kernel_id == 3 # Bartlett
-        scalar coeff_white = 4*(sumc((ae.*se./(((1-ae).^3).*(1+ae))).^2))'/ad
-        eband = 1.1447*((coeff_white*T)^(1/3))
+    /* Compute bandwidth. */
+
+    if kernel_id == 1       # Quadratic Spectral
+        scalar coeff_white = 4 * ( sumc((ae.*se./((1-ae).^4)).^2) ) / ad
+        eband = 1.3221 * ( (coeff_white * T)^.2 )
+    elif kernel_id == 2     # Parzen
+        scalar coeff_white = 4 * ( sumc((ae.*se./((1-ae).^4)).^2) ) / ad
+        eband = 2.6614 * ( (coeff_white * T)^.2 )
+    elif kernel_id == 3     # Bartlett
+        scalar coeff_white = 4 * ( sumc((ae.*se./(((1-ae).^3).*(1+ae))).^2) )' / ad
+        eband = 1.1447 * ( (coeff_white * T)^(1/3) )
     else
         eband = NA
     endif
+
     return eband
 end function
 
 
-function matrix compute_kernel (const int T,
+function matrix compute_kernel (int T,
                                 int kernel_id,
                                 scalar eband)
     /* */
-    matrix kernel_est = {}
+
     matrix jb = seq(1, (T-1)) ./ eband
 
     if kernel_id == 1   # Quadratic Spectral Kernel #
         jband = jb * 1.2 * $pi
-        kernel_est = 3 * ((sin(jband)./jband - cos(jband))./(jband.^2))
+        matrix kernel_est = 3 * ((sin(jband)./jband - cos(jband))./(jband.^2))
     elif kernel_id == 2     #  Parzen kernel_id
-        kernel_est = (1 - (jb.^2)*6 + (jb.^3)*6).*(jb .<= 0.5)
+        matrix kernel_est = (1 - (jb.^2)*6 + (jb.^3)*6).*(jb .<= 0.5)
         kernel_est = kernel_est + 2 * ((1-jb).^3) .* ((jb .<=1) && (jb .> 0.5))
     elif kernel_id == 3     #  Bartlett kernel_id
-        kernel_est = (1-jb).*(jb .<= 1)
+        matrix kernel_est = (1-jb).*(jb .<= 1)
+    else
+        matrix kernel_est = {}
     endif
 
     return vec(kernel_est)
@@ -138,23 +157,26 @@ function void add_column_dimensions (bundle *self)
 end function
 
 
-function matrix get_error_dynamics (const list xlist "in levels",
-                                    const series deter "Deterministics")
-    /* Compute 1st differences and regressor deterministcs on these. */
+function matrix get_shortrun_innovations (const list xlist "in levels",
+                                          const series deter "Deterministics")
+    /* Compute short-term innovations: deviations of 1st-differences from deterministics. */
 
-    matrix uhat
     list sdx = diff(xlist)
+    smpl sdx --no-missing
+    matrix u = mshape(NA, $nobs, 1)
 
-    mols({sdx}, {deter}, &uhat)
+    mols({sdx}, {deter}, &u)
 
-    return uhat
+    return u
 end function
 
 
-function series get_bhat_and_error_coint (const series y "Endogenous in levels",
-                                          const list xlist "levels + deterministics",
-                                          matrix *bhat)
+function series get_longrun_innovations (const series y "Endogenous in levels",
+                                         const list xlist "levels + deterministics",
+                                         matrix *bhat)
     /* Compute long-run coefficient vector and return residuals which are equivalent to deviations from long-run relationship. */
+
+    smpl y xlist --no-missing
 
     catch ols y xlist --quiet
     errorif($error, "Level estimation failed. Abort.")
@@ -164,7 +186,8 @@ function series get_bhat_and_error_coint (const series y "Endogenous in levels",
 end function
 
 
-function matrix est_var_model (const matrix m, const int max_lag[1::],
+function matrix est_var_model (const matrix m,
+                               const int max_lag[1::],
                                matrix *uhat)
     /* Estimate a VAR model by mols(). Return coefficient matrix. */
 
@@ -174,21 +197,21 @@ function matrix est_var_model (const matrix m, const int max_lag[1::],
     matrix m_lags = mlag(m, p, NA)[init:,]
 
     matrix bhat = mols( m[init:,], m_lags, &uhat )
-    errorif($error, "Prewhitening failed. Abort.")
+    errorif($error, "Pre-whitening failed. Abort.")
 
     return bhat
 end function
 
 
-function scalar compute_bandwidth (const matrix errors,
+function scalar compute_bandwidth (const matrix mat,
                                    const int kernel_id)
     /* Compute optimal bandwidth.
     return: scalar value of otpimal bandwidth. */
 
-    scalar T = rows(errors)
+    scalar T = rows(mat)
 
-    matrix eb = errors[1:(T - 1),]
-    matrix ef = errors[2:T,]
+    matrix eb = mat[1:(T-1),]
+    matrix ef = mat[2:T,]
     matrix ae = ( sumc(eb .* ef)./sumc(eb.^2) )'
     matrix ee = ef - eb .* ae'
     matrix se = sqrt( meanc(ee.^2) )'
@@ -198,22 +221,31 @@ function scalar compute_bandwidth (const matrix errors,
 end function
 
 
-function bundle FMOLS (series ys,
+function bundle FMOLS (const series ys,
                        const list xlist,
                        int k1[0:1:0] "Model deterministics" {"Constant", "Constant and Trend"},
                        int k2[0:2:1] "DGP of X" {"No drift in X", "Drift in X", "Quadratic trend in X"},
-                       bool whiten[1] "VAR Prewithening for covariance estimation",
+                       bool whiten[TRUE] "VAR Prewithening for covariance estimation",
                        int kernel_id[1:3:1] "Kernel for covariance estimation" {"Quadratic", "Parzen", "Bartlett"},
-                       const bool band[FALSE] "Bandwidth for covariance estimation, default: automatic")
-    /* */
+                       bool band[FALSE] "Bandwidth for covariance estimation, default: automatic",
+                       const bool verbose[TRUE])
+    /* Oublic function calling all necessary steps. */
+
+    # TODO: Rename parameters
 
     bundle self = null
 
     self = self + check_sample(deflist(ys, xlist))
     smpl self.t1 self.t2
-    self.T = $nobs
-
-    string rnames = varname(xlist)
+    scalar self.T = $nobs
+    scalar self.k1 = k1
+    scalar self.k2 = k2
+    scalar self.whiten = whiten
+    scalar self.kernel_id = kernel_id
+    scalar self.band = band
+    string self.names_xlist = varname(xlist)
+    string self.names_deterministics = self.k1 ==1 ? "constant,trend" : \
+                                       "constant"
 
     # create matrices from input series
     matrix self.my = {ys}
@@ -221,35 +253,30 @@ function bundle FMOLS (series ys,
 
     add_column_dimensions(&self)
 
-    # deterministic order in regressors
-    #matrix t2  = timepoly((self.T - 1), xmax(0, (k2 - 1)))
-
     # As we use series instead of vectors, we don't need to adjust smpl
-    series det_levels = timepoly($nobs, k1)
+    series det_levels = timepoly($nobs, self.k1)
     #smpl (self.t1 + 1) ;            # TODO: why (t1+1) ?
-    series det_dynamics  = timepoly($nobs, xmax(0, (k2 - 1)))
-    smpl full
+    series det_dynamics  = timepoly($nobs, xmax(0, (self.k2 - 1)))
+    smpl full           # TODO: seems that can be droppped later
 
     # OLS regression of levels + deterministics
-    list X = det_levels xlist
-    smpl (self.t1 + 1) ;            # TODO: why (t1+1) ?
+    list xlist_deter = xlist det_levels
     matrix bhat_coint
     #  OLS Residuals and regressor innovations
-    series errors_coint = get_bhat_and_error_coint(ys, X, &bhat_coint)
+    series lrun_innovations = get_longrun_innovations(ys, xlist_deter, &bhat_coint)
     /*
     # OLS regression of levels + deterministics
     matrix xt = self.mx ~ timepoly(self.T, k1)
     matrix y2 = self.my[2:,]
-    matrix {X} = xt[2:,]
-    matrix bhat_coint = mols(y2, {X})
+    matrix {xlist_deter} = xt[2:,]
+    matrix bhat_coint = mols(y2, {xlist_deter})
     bhat_coint
     */
 
-    # Construct errors of dynamics
+    # Construct errors of dynamics - has (T-1) observations due to differencing
     # Note: ols command not applicable as sdx can have multiple columns
-    smpl full
-    smpl (self.t1 + 1) ;            # TODO: why (t1+1) ?
-    matrix errors_dynamic = get_error_dynamics(xlist, det_dynamics)
+    smpl full               # TODO: drop later?
+    matrix self.srun_innovations = get_shortrun_innovations(xlist, det_dynamics)
     /*
     dx = diff(self.mx)[2:,]
     matrix uhat
@@ -259,92 +286,139 @@ function bundle FMOLS (series ys,
     stop
     #*/
 
-    matrix xdx = {X}'errors_dynamic    # Was ist das inhaltlich?
+
+    # Was ist das inhaltlich?
+    smpl +1 ;
+    matrix xdx = {xlist_deter}'self.srun_innovations
 
     # Concatenate errors
-    matrix errors_stacked = {errors_coint} ~ errors_dynamic
-    vcv_errors_stacked = errors_stacked'errors_stacked
+    matrix innovations = {lrun_innovations} ~ self.srun_innovations
+    vcv_errors_stacked = innovations'innovations
 
-    # Pre-whiten residuals using VAR(1)
-    if whiten
-        matrix errors_white
-        scalar PREWHITENING_LAG = 1        # TODO: move to settings
-        matrix coeff_white = est_var_model(errors_stacked,\
+    if whiten                   # Pre-whiten residuals using VAR(p)
+        matrix errors_white                 # TODO: initialize at the beginning
+        scalar PREWHITENING_LAG = 1         # TODO: move to settings
+        matrix coeff_white = est_var_model(innovations,\
                                            PREWHITENING_LAG, &errors_white)
-        self.Teffective = self.T - 2
     else
-        matrix errors_white = errors_stacked
-        self.Teffective = self.T - 1
+        matrix errors_white = innovations
     endif
+    self.Teffective = rows(errors_white)
 
-    # Select Bandwidth
+    # Select Bandwidth # TODO: argument should be 'auto_bandwidth[FALSE]'
     if band == TRUE
-        scalar eband = band
+        # FIXME: Why is bandwidth == band if 'band' is a boolean?
+        scalar self.bandwidth = band
     else
-        # TODO: is this alwayw ensured currently?`
-        assert(rows(errors_white) == self.Teffective)
-        scalar eband = compute_bandwidth(errors_white, kernel_id)
+        scalar self.bandwidth = compute_bandwidth(errors_white, kernel_id)
     endif
 
-    * hier weitermachen
-
-    # Estimate Covariances #
-    matrix kernel_est = compute_kernel(self.Teffective, kernel_id, eband)
+    # Estimate covariances
+    matrix kernel_est = compute_kernel(self.Teffective, kernel_id,\
+                                       self.bandwidth)
     matrix sigma = errors_white'errors_white
 
-    matrix lam = zeros(self.cols_mymx, self.cols_mymx)
-    loop j=1..rows(kernel_est)
-        mtmp = errors_white[1:(self.Teffective - j),]'errors_white[(1 + j):self.Teffective,]
-        lam += mtmp * kernel_est[j]
-    endloop
+    # lambda is the long-run covariance matrix
+    matrix lambda = longrun_cov(kernel_est, errors_white)
+    # TODO: Could longrun_cov be replaced by?
+    /*
+    set hac_prewhiten on
+    set hac_lag nw1 #PREWHITENING_LAG
+    set hac_kernel qs
+    matrix my_lambda = lrcovar(errors_white, FALSE)
+    */
 
-    delta = sigma + lam
-    omega = delta + lam'
+    matrix self.delta = sigma + lambda
+    matrix self.omega = self.delta + lambda'
 
-    # Recolor
-    if whiten
-        matrix ai = inv(I(self.cols_mymx) - coeff_white)
-        omega = qform(ai', omega)
-        delta = ai'delta * ai - ai'(coeff_white'vcv_errors_stacked)
+    if whiten           # Recolor
+        matrix ai
+        matrix self.omega = recolor_omega(self.omega, coeff_white, &ai)
+        matrix self.delta = recolor_delta(self.delta, coeff_white, ai,\
+                                          vcv_errors_stacked)
     endif
 
-    # Fully Modified Estimation
-    g = mols(omega[2:self.cols_mymx,1],\
-            omega[2:self.cols_mymx,2:self.cols_mymx])
+    bundle model = fmols(ys, xlist_deter, self)
+    model.T = self.T
 
-    delg = delta[2:self.cols_mymx,1] - \
-            delta[2:self.cols_mymx,2:self.cols_mymx] * g
+    if verbose
+        print_results(self, model)
+    endif
 
-    delg |= zeros((k1 + 1), self.cols_my)
-    ystar = y2 - uhat * g
-    bhat_coint = xxi * ({X}'ystar - delg)
-    b1 = bhat_coint[1:self.cols_mx]
-    b2 = bhat_coint[(self.cols_mx +1) :]
-
-    #  Covariance Matrix #
-    sg = (omega[1,1] - omega[1,2:self.cols_mymx] * g) / (self.T - 1)
-    v = xxi * sg
-    errors_stacked = ystar - {X} * bhat_coint
-    se = sqrt(diag(v))
-    errors_stacked = self.my - xt * bhat_coint
-
-    # I(1) coefficients
-    matrix b1m = b1 ~ se[1:self.cols_mx]
-
-    # deterministics
-    matrix b2m = b2 ~ se[(self.cols_mx + 1):]
-
-    print_results(self.T, rnames, b1m, b2m, k1, k2, whiten, kernel_id,\
-                  band, eband)
-
-    self["b1"] = b1
-    self["b2"] = b2
-    self["v"] = v
-    self["errors_stacked"] = errors_stacked
-
-    return self
+    return model
 end function
 
+
+function bundle fmols (const series ys,
+                       const list xlist_deter,
+                       const bundle self)
+    /* Actual FMOLS estimator. */
+
+    smpl ($tmax - self.Teffective) ;
+
+    bundle B
+    scalar n_yxlist = self.cols_mymx
+    scalar n_xlist = self.cols_mx
+
+    g = mols(self.omega[2:n_yxlist, 1], self.omega[2:n_yxlist, 2:n_yxlist])
+
+    delta_g = self.delta[2:n_yxlist, 1] - self.delta[2:n_yxlist, 2:n_yxlist] * g
+    delta_g |= zeros((self.k1 + 1), self.cols_my)    # this is "M*"
+
+    # Clean "y"
+    matrix B.ystar = ys - self.srun_innovations * g
+
+    # Cointegrating vector based on clean "y"
+    matrix m_xlist_deter = {xlist_deter}
+    matrix xxi = invpd(m_xlist_deter'm_xlist_deter)
+
+    matrix bhat_coint = xxi * (m_xlist_deter'B.ystar - delta_g)
+    matrix B.bhat_coint = bhat_coint[1:n_xlist]
+    matrix B.bhat_deter = bhat_coint[(n_xlist + 1):]
+
+    #  Covariance matrix
+    matrix sg = (self.omega[1,1] - self.omega[1,2:n_yxlist] * g) / ($nobs - 1)
+    matrix B.vcv = xxi * sg
+    matrix B.uhat = B.ystar - {xlist_deter} * bhat_coint
+    matrix B.se = sqrt(diag(B.vcv))
+
+    return B
+end function
+
+
+function matrix recolor_delta (const matrix delta,
+                               const matrix coeff_white "pre-whitened coeffs.",
+                               const matrix ai,
+                               const matrix vcv_errors_stacked)
+    /*  */
+    return ai'delta * ai - ai'(coeff_white'vcv_errors_stacked)
+end function
+
+
+function matrix recolor_omega (const matrix omega,
+                               const matrix coeff_white "pre-whitened coeffs.",
+                               matrix *ai)
+    /*  */
+
+    ai = inv( I(cols(omega)) - coeff_white)
+    return qform(ai', omega)
+end function
+
+
+function matrix longrun_cov (const matrix kernel_est "weights",
+                             const matrix u "innovations")
+    /* Compute the long-run covariance matrix. */
+
+    scalar T = rows(u)
+    matrix lambda = mshape(0, cols(u), cols(u))
+
+    loop j=1..rows(kernel_est)
+        matrix m = u[1:(T-j),]'u[(1+j):T,]
+        lambda += m * kernel_est[j]
+    endloop
+
+    return lambda
+end function
 
 
 function void Debug (const string s)
@@ -362,3 +436,4 @@ end function
 function void Error (const string s)
     printf "\nError: %s\n", s
 end function
+
