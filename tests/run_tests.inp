@@ -27,9 +27,9 @@ test_get_kernel_id(Params)
 
 
 bundles Params = null
-Params = Params + _(type = "constant", expected = 0)
-Params = Params + _(type = "linear_trend", expected = 1)
-Params = Params + _(type = "quadratic_trend", expected = 2)
+Params = Params + _(type = "c", expected = 0)
+Params = Params + _(type = "ct", expected = 1)
+Params = Params + _(type = "ctt", expected = 2)
 
 function void test_get_trend_powermax (const bundles P)
     print "Start testing get_trend_powermax()."
@@ -68,8 +68,8 @@ open denmark.gdt --quiet
 series spread = IDE - IBO
 list xlist = LRY spread
 bundles Parameters = null
-Parameters = Parameters + _(type_deterministic = "constant",\
-                            type_dgp_x = "constant",\
+Parameters = Parameters + _(type_deterministic = "c",\
+                            type_dgp_x = "c",\
                             do_prewhite = TRUE,\
                             type_kernel = "quadratic",\
                             verbose = FALSE,\
@@ -81,8 +81,8 @@ Parameters = Parameters + _(type_deterministic = "constant",\
                             expected_sd_ec = 0.061586866\
                             )
 
-Parameters = Parameters + _(type_deterministic = "linear_trend",\
-                            type_dgp_x = "constant",\
+Parameters = Parameters + _(type_deterministic = "ct",\
+                            type_dgp_x = "c",\
                             do_prewhite = FALSE,\
                             type_kernel = "parzen",\
                             verbose = FALSE,\

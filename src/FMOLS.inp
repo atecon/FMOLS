@@ -24,11 +24,11 @@ end function
 function string msg_type_dgp_x (const string type)
     /* Map selected type to unique ID. */
 
-    if type == "constant"
+    if type == "c"
         ret = " Constant"
-    elif type == "linear_trend"
+    elif type == "ct"
         ret = " Constant and trend"
-    elif type == "quadratic_trend"
+    elif type == "ctt"
         ret = " Constant, linear and quadratic trend"
     endif
 
@@ -51,17 +51,19 @@ function void print_results (const bundle self, const bundle model)
 
     matrix b1m = model.bhat_coint ~ model.se_coint
     matrix b2m = model.bhat_deter ~ model.se_deter
-
     string names_xlist = self.names_xlist
-    string names_deterministics = strsub(self.type_deterministic, "_", " ")
+
+    names_deterministics = msg_type_dgp_x(self.type_deterministic)
+    names_deterministics = strsub(names_deterministics, ",", "")
+    names_deterministics = tolower(strsub(names_deterministics, "and", ""))
     string msg_type_dgp_x = msg_type_dgp_x(self.type_dgp_x)
     string msg_whiten = msg_prewhiten(self.do_prewhite)
     string msg_kernel = sprintf(" %s", toupper(self.type_kernel))
 
     if self.bandwidth == -1
-        msg_band = sprintf(" Automatic, estimate = %5.3g\n", self.bandwidth)
+        msg_band = sprintf("(automatic) estimate: %5.3g\n", self.bandwidth_value)
     else
-        msg_band = sprintf(" Preset at = %2.3g\n", self.bandwidth)
+        msg_band = sprintf("preset at: %2.3g\n", self.bandwidth_value)
     endif
 
     print  "======================================================================"
@@ -76,6 +78,7 @@ function void print_results (const bundle self, const bundle model)
     print ""
     print "Deterministic terms"
     modprint b2m names_deterministics
+
     printf "Assumed regressor deterministics:"
     print msg_type_dgp_x
 
@@ -85,7 +88,7 @@ function void print_results (const bundle self, const bundle model)
     printf "Kernel:"
     print msg_kernel
 
-    printf "Bandwidth:"
+    printf "Bandwidth "
     print msg_band
 
     print  "======================================================================\n\n"
@@ -245,8 +248,8 @@ function bundle fmols_defaults (void)
 
     bundle B
 
-    string B.type_deterministic = "constant"
-    string B.type_dgp_x = "constant"
+    string B.type_deterministic = "c"
+    string B.type_dgp_x = "c"
     string B.type_kernel = "quadratic"
     scalar B.do_prewhite = TRUE
     scalar B.prewhitening_lag = 1
@@ -261,9 +264,9 @@ function scalar get_trend_powermax (const string type)
     /* Map deterministics to maximum degree (power) of trend variable. */
 
     bundle map = _(\
-                        constant = 0,\
-                        linear_trend = 1,\
-                        quadratic_trend = 2\
+                        c = 0,\
+                        ct = 1,\
+                        ctt = 2\
                     )
 
     return map[type]
@@ -335,19 +338,19 @@ function bundle FMOLS (const series ys,
     scalar self.Teffective = rows(innovations_white)
 
     if self.bandwidth == -1
-        scalar self.bandwidth = compute_bandwidth(innovations_white,\
-                                                  self.type_kernel)
+        scalar self.bandwidth_value = compute_bandwidth(innovations_white,\
+                                                         self.type_kernel)
     endif
 
     # Estimate covariances
     matrix kernel_est = compute_kernel(self.Teffective, self.type_kernel,\
-                                       self.bandwidth)
+                                       self.bandwidth_value)
     matrix sigma = innovations_white'innovations_white
 
     # long-run covariance matrix
     matrix lambda = longrun_cov(kernel_est, innovations_white)
     # TODO: Could longrun_cov be replaced by?
-    /*
+    /* Does not lead the same results!
     set hac_prewhiten on
     set hac_lag nw1 #self.prewhitening_lag
     set hac_kernel qs
@@ -357,14 +360,14 @@ function bundle FMOLS (const series ys,
     matrix self.delta = sigma + lambda
     matrix self.omega = self.delta + lambda'
 
-    if self.do_prewhite           # Recolor
+    if self.do_prewhite
         matrix ai
         matrix self.omega = recolor_omega(self.omega, coeff_white, &ai)
         matrix self.delta = recolor_delta(self.delta, coeff_white, ai,\
                                           vcv_innovations)
     endif
 
-    bundle model = fmols(ys, xlist_deter, self)
+    bundle model = fmols_est(ys, xlist_deter, self)
     model.T = self.T
     model.name_endogenous = argname(ys)
     model.names_xlist = varnames(xlist)
@@ -377,9 +380,9 @@ function bundle FMOLS (const series ys,
 end function
 
 
-function bundle fmols (const series ys,
-                       const list xlist_deter,
-                       const bundle self)
+function bundle fmols_est (const series ys,
+                           const list xlist_deter,
+                           const bundle self)
     /* Actual FMOLS estimator. */
 
     smpl (1 + self.t1) ;

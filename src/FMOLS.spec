@@ -1,7 +1,7 @@
-author = Artur Tarassow
-email = Stefano Fachin, Riccardo "Jack" Lucchetti and Artur Tarassow
+author = Stefano Fachin, Riccardo "Jack" Lucchetti and Artur Tarassow
+email = stefano.fachin@uniroma1.it
 version = 2.0
-date = 2021-04-06
+date = 2021-04-09
 description = Fully Modified Least Squares Estimation for I(1) variables
 tags = C13 C52
 min-version = 2020c

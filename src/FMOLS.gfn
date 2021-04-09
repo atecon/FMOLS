@@ -1,0 +1,566 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="FMOLS" minver="2020c">
+<author email="stefano.fachin@uniroma1.it">Stefano Fachin, Riccardo &quot;Jack&quot; Lucchetti and Artur Tarassow</author>
+<version>2.0</version>
+<date>2021-04-09</date>
+<description>Fully Modified Least Squares Estimation for I(1) variables</description>
+<tags>C13 C52</tags>
+<help>
+This function carries out Fully Modified Least Squares (FMLS) estimation.
+It is essentially a translation (with permission) of the Gauss procedure
+FMPROC included in the suite COINT 2.0, by S. Ouliaris and P.C.B Phillips.
+
+
+References:
+Hansen, B. E. and P. C. B. Phillips (1990), &quot;Estimation and Inference
+in Models of Cointegration: A Simulation Study&quot;, Advances in
+Econometrics, Vol. 8, pp. 225-248, Jai Press, Inc.:London.
+
+Phillips, P. C. B. and B. E. Hansen (1990), &quot;Statistical Inference in
+Instrumental Variables Regression with I(1) Process&quot;, Review of
+Economic Studies 57, pp. 99-125.
+
+
+The only public function is FMOLS() which has the following arguments:
+
+FMOLS(const series y, const list x, const bundle opts[null])
+==================================================================
+
+Input parameters
+    y:     series, Dependent variable
+    x:     list, Right Hand Side I(1) variables
+    opts:  bundle, Pass user-specific parameters (optional)
+
+
+Return: Bundle holding various information; see below.
+
+
+The FMOLS() function is executed with some default parameter values.
+The user, however, can overwrite the following parameters by passing the
+'opts' bundle:
+==============================================================================
+type_deterministic:
+            string, Select the deterministic to be included.
+                    Options are:
+                    &quot;c&quot;: include a constant (default)
+                    &quot;ct&quot;: include a constant and linear trend
+                    &quot;ctt&quot;: include a constant, linear and quadratic trend
+
+type_dgp_x:
+            string, Select the deterministic which is believed to be
+            describing the stochastic process of the regressors &quot;x&quot;.
+            Options are:
+                    &quot;c&quot;: include a constant (default)
+                    &quot;ct&quot;: include a constant and linear trend
+                    &quot;ctt&quot;: include a constant, linear and quadratic trend
+
+do_prewhite:
+            boolean, Perform VAR(1) pre-whitening when calculating
+            covariances of 1 (=TRUE), otherwise not.
+
+prewhitening_lag:
+            int, Lag-length of the VAR(p) for pre-whitening (default p=1)
+
+type_kernel:
+            string, Select the kernel method. Options are:
+                     &quot;quadratic&quot;: Quadratic Spectral kernel (default)
+                     &quot;parzen&quot;: Parzen kernel
+                     &quot;bartlett&quot;: Bartlett kernel
+bandwidth:
+           scalar, Bandwidth for covariance calculation. The special value
+           -1 triggers Andrews' (1991) automatic bandwidth selection. A
+           VAR(1) model is used to calculate the automatic bandwidth.
+
+verbose:
+           boolean, Print any output if 1 (=TRUE) (default), otherwise not.
+
+
+The returned bundle contains:
+=============================
+    bhat_coint: FM estimates of the coefficients on the regressors x
+    bhat_deter: FM estimates of the coefficients on the deterministic regressors
+    se_coint:   FM std. errors of the coefficients on the regressors x
+    se_deter:   FM std. errors of the coefficients on the deterministic
+                regressors
+    vcv:        FM covariance matrix for the vector (bhat_coint bhat_deter)
+    ec:         Series of FM residuals
+    T:          Number of valid observations used
+    ystar:      &quot;Cleaned&quot; endogenous
+    name_endogenous: Name of the dependent variable
+    names_xlist: String array of the exogenous
+
+
+Changelog:
+==========
+v2.0 (April 2021):
+  - Refactored code
+  - Improved and new user-interface with an option to pass bundle of
+    parameters.
+v1.0 (March 2017):
+  - initial version
+</help>
+<gretl-function name="FMOLS" type="bundle">
+ <params count="3">
+  <param name="ys" type="series" const="true"/>
+  <param name="xlist" type="list"/>
+  <param name="opts" type="bundle" optional="true" const="true"/>
+ </params>
+<code>/* Public function calling all necessary steps. */
+bundle self = fmols_defaults()
+if exists(opts)
+  self = opts + self
+endif
+self.type_deterministic = tolower(self.type_deterministic)
+self.type_dgp_x = tolower(self.type_dgp_x)
+self.type_kernel = tolower(self.type_kernel)
+string self.name_endogenous = argname(ys)
+string self.names_xlist = varname(xlist)
+self = self + check_sample(deflist(ys, xlist))
+smpl self.t1 self.t2
+scalar self.T = $nobs
+add_column_dimensions(xlist, &amp;self)
+list det_levels
+list det_dynamics
+matrix mtmp = timepoly($nobs, get_trend_powermax(self.type_deterministic))
+loop i=1..cols(mtmp)
+  det_levels += genseries(sprintf(&quot;%s&quot;, cnameget(mtmp)[i]), mtmp[,i])
+endloop
+# one obs. lost due to differencing for changes in levels
+smpl (self.t1+1) ;
+matrix mtmp = timepoly($nobs, get_trend_powermax(self.type_dgp_x))
+loop i=1..cols(mtmp)
+  det_dynamics += genseries(sprintf(&quot;%s_dyn&quot;, cnameget(mtmp)[i]), mtmp[,i])
+endloop
+# OLS regression of levels + deterministics
+list xlist_deter = xlist det_levels
+smpl (self.t1 + 1) ;
+series lrun_innovations = get_longrun_innovations(ys, xlist_deter)
+# Construct errors of dynamics: Has (T-1) observations due to differencing
+# Note: ols command not applicable as sdx can have multiple columns
+smpl full
+matrix self.srun_innovations = get_shortrun_innovations(xlist, det_dynamics)
+smpl (self.t1 + 1) ;
+matrix xdx = {xlist_deter}'self.srun_innovations
+# Concatenate errors
+matrix innovations = {lrun_innovations} ~ self.srun_innovations
+vcv_innovations = innovations'innovations
+if self.do_prewhite             # Pre-white residuals using VAR(p)
+  matrix innovations_white
+  matrix coeff_white = est_var_model(innovations, self.prewhitening_lag, &amp;innovations_white)
+else
+  matrix innovations_white = innovations
+endif
+scalar self.Teffective = rows(innovations_white)
+if self.bandwidth == -1
+  scalar self.bandwidth_value = compute_bandwidth(innovations_white, self.type_kernel)
+endif
+# Estimate covariances
+matrix kernel_est = compute_kernel(self.Teffective, self.type_kernel, self.bandwidth_value)
+matrix sigma = innovations_white'innovations_white
+# long-run covariance matrix
+matrix lambda = longrun_cov(kernel_est, innovations_white)
+# TODO: Could longrun_cov be replaced by?
+/* Does not lead the same results!
+set hac_prewhiten on
+set hac_lag nw1 #self.prewhitening_lag
+set hac_kernel qs
+matrix my_lambda = lrcovar(innovations_white, FALSE)
+*/
+matrix self.delta = sigma + lambda
+matrix self.omega = self.delta + lambda'
+if self.do_prewhite
+  matrix ai
+  matrix self.omega = recolor_omega(self.omega, coeff_white, &amp;ai)
+  matrix self.delta = recolor_delta(self.delta, coeff_white, ai, vcv_innovations)
+endif
+bundle model = fmols_est(ys, xlist_deter, self)
+model.T = self.T
+model.name_endogenous = argname(ys)
+model.names_xlist = varnames(xlist)
+if self.verbose
+  print_results(self, model)
+endif
+return model
+</code>
+</gretl-function>
+<gretl-function name="timepoly" type="matrix" private="1">
+ <params count="2">
+  <param name="T" type="int" min="1"/>
+  <param name="maxpower" type="int" min="0"/>
+ </params>
+<code>/* Compute constant and (non-)linear trend. */
+strings clabels = defarray(&quot;intercept&quot;)
+matrix ret = ones(T, 1)
+if maxpower &gt; 0
+  scalar hT = floor(T / 2)
+  scalar even = T % 2
+  matrix trend = seq((1 - even - hT), hT)'
+  ret ~= trend.^seq(1, maxpower)
+  loop i=1..maxpower
+    clabels = clabels + sprintf(&quot;trend_pow_%d&quot;, $i)
+  endloop
+endif
+cnameset(ret, clabels)
+return ret
+</code>
+</gretl-function>
+<gretl-function name="msg_type_dgp_x" type="string" private="1">
+ <params count="1">
+  <param name="type" type="string" const="true"/>
+ </params>
+<code>/* Map selected type to unique ID. */
+if type == &quot;c&quot;
+  ret = &quot; Constant&quot;
+elif type == &quot;ct&quot;
+  ret = &quot; Constant and trend&quot;
+elif type == &quot;ctt&quot;
+  ret = &quot; Constant, linear and quadratic trend&quot;
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="msg_prewhiten" type="string" private="1">
+ <params count="1">
+  <param name="do_prewhite" type="bool"/>
+ </params>
+<code>/* For printing only. */
+if do_prewhite
+  return &quot; Pre-Whitened&quot;
+else
+  return &quot; Not Pre-Whitened&quot;
+endif
+</code>
+</gretl-function>
+<gretl-function name="print_results" type="void" private="1">
+ <params count="2">
+  <param name="self" type="bundle" const="true"/>
+  <param name="model" type="bundle" const="true"/>
+ </params>
+<code>/* Print estimation results. */
+matrix b1m = model.bhat_coint ~ model.se_coint
+matrix b2m = model.bhat_deter ~ model.se_deter
+string names_xlist = self.names_xlist
+names_deterministics = msg_type_dgp_x(self.type_deterministic)
+names_deterministics = strsub(names_deterministics, &quot;,&quot;, &quot;&quot;)
+names_deterministics = tolower(strsub(names_deterministics, &quot;and&quot;, &quot;&quot;))
+string msg_type_dgp_x = msg_type_dgp_x(self.type_dgp_x)
+string msg_whiten = msg_prewhiten(self.do_prewhite)
+string msg_kernel = sprintf(&quot; %s&quot;, toupper(self.type_kernel))
+if self.bandwidth == -1
+  msg_band = sprintf(&quot;(automatic) estimate: %5.3g\n&quot;, self.bandwidth_value)
+else
+  msg_band = sprintf(&quot;preset at: %2.3g\n&quot;, self.bandwidth_value)
+endif
+print  &quot;======================================================================&quot;
+print &quot;Fully Modified Least Squares Regression&quot;
+printf &quot;using observations %s-%s (T = %d)\n&quot;, obslabel(self.t1), obslabel(self.t2), self.T
+printf &quot;Dependent variable: %s\n&quot;, self.name_endogenous
+print  &quot;_____________________________________________________________________&quot;
+print  &quot;&quot;
+print  &quot;  I(1) variables&quot;
+modprint b1m names_xlist
+print &quot;&quot;
+print &quot;Deterministic terms&quot;
+modprint b2m names_deterministics
+printf &quot;Assumed regressor deterministics:&quot;
+print msg_type_dgp_x
+printf &quot;Method of estimation of covariance parameters:&quot;
+print msg_whiten
+printf &quot;Kernel:&quot;
+print msg_kernel
+printf &quot;Bandwidth &quot;
+print msg_band
+print  &quot;======================================================================\n\n&quot;
+</code>
+</gretl-function>
+<gretl-function name="get_kernel_id" type="scalar" private="1">
+ <params count="1">
+  <param name="name" type="string" const="true"/>
+ </params>
+<code>/* Map kernel type to unique ID. */
+bundle map = _( quadratic = 1, parzen = 2, bartlett = 3 )
+return map[name]
+</code>
+</gretl-function>
+<gretl-function name="bwidth" type="scalar" private="1">
+ <params count="5">
+  <param name="type_kernel" type="string" const="true"/>
+  <param name="T" type="int"/>
+  <param name="ae" type="matrix" const="true"/>
+  <param name="se" type="matrix" const="true"/>
+  <param name="ad" type="scalar"/>
+ </params>
+<code>/* Compute bandwidth. */
+if get_kernel_id(type_kernel) == 1       # Quadratic Spectral
+  scalar coeff_white = 4 * ( sumc((ae.*se./((1-ae).^4)).^2) ) / ad
+  eband = 1.3221 * ( (coeff_white * T)^.2 )
+elif get_kernel_id(type_kernel) == 2     # Parzen
+  scalar coeff_white = 4 * ( sumc((ae.*se./((1-ae).^4)).^2) ) / ad
+  eband = 2.6614 * ( (coeff_white * T)^.2 )
+elif get_kernel_id(type_kernel) == 3     # Bartlett
+  scalar coeff_white = 4 * ( sumc((ae.*se./(((1-ae).^3).*(1+ae))).^2) )' / ad
+  eband = 1.1447 * ( (coeff_white * T)^(1/3) )
+else
+  funcerr sprintf(&quot;Kernel type '%s' not known. Abort.&quot;, type_kernel)
+endif
+return eband
+</code>
+</gretl-function>
+<gretl-function name="compute_bandwidth" type="scalar" private="1">
+ <params count="2">
+  <param name="mat" type="matrix" const="true"/>
+  <param name="type_kernel" type="string" const="true"/>
+ </params>
+<code>/* Compute optimal bandwidth.
+return: scalar value of optimal bandwidth. */
+scalar T = rows(mat)
+matrix eb = mat[1:(T-1),]
+matrix ef = mat[2:T,]
+matrix ae = ( sumc(eb .* ef)./sumc(eb.^2) )'
+matrix ee = ef - eb .* ae'
+matrix se = sqrt( meanc(ee.^2) )'
+scalar ad = sumc( (se ./ ((1 - ae).^2)).^2 )'
+return bwidth(type_kernel, T, ae, se, ad)
+</code>
+</gretl-function>
+<gretl-function name="compute_kernel" type="matrix" private="1">
+ <params count="3">
+  <param name="T" type="int" min="1"/>
+  <param name="type_kernel" type="string" const="true"/>
+  <param name="bandwidth" type="scalar"/>
+ </params>
+<code>/* Compute kernel-based weights. */
+matrix jb = seq(1, (T-1)) ./ bandwidth
+if get_kernel_id(type_kernel) == 1   # Quadratic Spectral
+  jband = jb * 1.2 * $pi
+  matrix kernel_est = 3 * ((sin(jband)./jband - cos(jband))./(jband.^2))
+elif get_kernel_id(type_kernel) == 2     #  Parzen
+  matrix kernel_est = (1 - (jb.^2)*6 + (jb.^3)*6).*(jb .&lt;= 0.5)
+  kernel_est = kernel_est + 2 * ((1-jb).^3) .* ((jb .&lt;=1) &amp;&amp; (jb .&gt; 0.5))
+elif get_kernel_id(type_kernel) == 3     #  Bartlett
+  matrix kernel_est = (1-jb).*(jb .&lt;= 1)
+else
+  funcerr sprintf(&quot;Kernel type '%s' is not known. Abort.&quot;, type_kernel)
+endif
+return vec(kernel_est)
+</code>
+</gretl-function>
+<gretl-function name="check_sample" type="bundle" private="1">
+ <params count="1">
+  <param name="L" type="list"/>
+ </params>
+<code>/*  Check for missing values and return sample start and end observations.*/
+scalar Told = $nobs
+smpl L --contiguous
+scalar Tnew = $nobs
+scalar Tdiff = Told - Tnew
+if Tdiff &amp;&amp; self.verbose
+  printf &quot;\nWarning: Dropped %d observations due to missing values.\n&quot;, Tdiff
+  printf &quot;\nInfo: Sample range: %s to %s.\n&quot;, obslabe($t1), obslabe($t2)
+endif
+return _(t1 = $t1, t2 = $t2)
+</code>
+</gretl-function>
+<gretl-function name="add_column_dimensions" type="void" private="1">
+ <params count="2">
+  <param name="xlist" type="list"/>
+  <param name="self" type="bundleref"/>
+ </params>
+<code>/*  Determine column dimensions of matrices. */
+scalar self.cols_mx = nelem(xlist)
+scalar self.cols_mymx = 1 + self.cols_mx
+</code>
+</gretl-function>
+<gretl-function name="get_shortrun_innovations" type="matrix" private="1">
+ <params count="2">
+  <param name="xlist" type="list">
+<description>in levels</description>
+  </param>
+  <param name="deter" type="list">
+<description>Deterministics</description>
+  </param>
+ </params>
+<code>/* Compute short-term innovations: deviations of 1st-differences from deterministics. */
+list sdx = diff(xlist)
+smpl sdx --no-missing
+matrix u = mshape(NA, $nobs, 1)
+mols({sdx}, {deter}, &amp;u)
+return u
+</code>
+</gretl-function>
+<gretl-function name="get_longrun_innovations" type="series" private="1">
+ <params count="2">
+  <param name="y" type="series" const="true">
+<description>Endogenous in levels</description>
+  </param>
+  <param name="xlist" type="list">
+<description>levels + deterministics</description>
+  </param>
+ </params>
+<code>/* Compute long-run coefficient vector and return residuals which are equivalent to deviations from long-run relationship. */
+smpl y xlist --no-missing
+catch ols y xlist --quiet
+errorif($error, &quot;Level estimation failed. Abort.&quot;)
+return $uhat
+</code>
+</gretl-function>
+<gretl-function name="est_var_model" type="matrix" private="1">
+ <params count="3">
+  <param name="m" type="matrix" const="true"/>
+  <param name="max_lag" type="int" min="1"/>
+  <param name="uhat" type="matrixref"/>
+ </params>
+<code>/* Estimate a VAR model by mols(). Return coefficient matrix. */
+scalar init = 1 + max_lag      # get rid of initial NAs
+scalar T = rows(m)
+matrix p = seq(1, max_lag)
+matrix m_lags = mlag(m, p, NA)[init:,]
+matrix bhat = mols( m[init:,], m_lags, &amp;uhat )
+errorif($error, &quot;Pre-whitening failed. Abort.&quot;)
+return bhat
+</code>
+</gretl-function>
+<gretl-function name="fmols_defaults" type="bundle" private="1">
+<code>/*  set and return default values. */
+bundle B
+string B.type_deterministic = &quot;c&quot;
+string B.type_dgp_x = &quot;c&quot;
+string B.type_kernel = &quot;quadratic&quot;
+scalar B.do_prewhite = TRUE
+scalar B.prewhitening_lag = 1
+scalar B.bandwidth = -1
+scalar B.verbose = TRUE
+return B
+</code>
+</gretl-function>
+<gretl-function name="get_trend_powermax" type="scalar" private="1">
+ <params count="1">
+  <param name="type" type="string" const="true"/>
+ </params>
+<code>/* Map deterministics to maximum degree (power) of trend variable. */
+bundle map = _( c = 0, ct = 1, ctt = 2 )
+return map[type]
+</code>
+</gretl-function>
+<gretl-function name="fmols_est" type="bundle" private="1">
+ <params count="3">
+  <param name="ys" type="series" const="true"/>
+  <param name="xlist_deter" type="list"/>
+  <param name="self" type="bundle" const="true"/>
+ </params>
+<code>/* Actual FMOLS estimator. */
+smpl (1 + self.t1) ;
+bundle B
+scalar n_yxlist = self.cols_mymx
+scalar n_xlist = self.cols_mx
+g = mols(self.omega[2:n_yxlist, 1], self.omega[2:n_yxlist, 2:n_yxlist])
+delta_g = self.delta[2:n_yxlist, 1] - self.delta[2:n_yxlist, 2:n_yxlist] * g
+scalar k = get_trend_powermax(self.type_deterministic)
+delta_g |= zeros((k + 1), 1)    # this is &quot;M*&quot;
+# Clean &quot;y&quot;
+series mask = 1
+smpl full
+matrix B.ystar = ys - self.srun_innovations * g
+smpl mask == 1 --restrict
+# Cointegrating vector based on clean &quot;y&quot;
+matrix m_xlist_deter = {xlist_deter}
+matrix xxi = invpd(m_xlist_deter'm_xlist_deter)
+matrix bhat = xxi * (m_xlist_deter'B.ystar - delta_g)
+matrix B.bhat_coint = bhat[1:n_xlist]
+matrix B.bhat_deter = bhat[(n_xlist + 1):]
+#  Covariance matrix
+matrix sg = (self.omega[1,1] - self.omega[1,2:n_yxlist] * g) / $nobs
+matrix B.vcv = xxi * sg
+matrix se = sqrt(diag(B.vcv))
+matrix B.se_coint = se[1:n_xlist]
+matrix B.se_deter = se[(n_xlist + 1):]
+matrix B.ec = B.ystar - {xlist_deter} * bhat  # error-correction term
+return B
+</code>
+</gretl-function>
+<gretl-function name="recolor_delta" type="matrix" private="1">
+ <params count="4">
+  <param name="delta" type="matrix" const="true"/>
+  <param name="coeff_white" type="matrix" const="true">
+<description>pre-whitened coeffs.</description>
+  </param>
+  <param name="ai" type="matrix" const="true"/>
+  <param name="vcv_innovations" type="matrix" const="true"/>
+ </params>
+<code>/*  */
+return ai'delta * ai - ai'(coeff_white'vcv_innovations)
+</code>
+</gretl-function>
+<gretl-function name="recolor_omega" type="matrix" private="1">
+ <params count="3">
+  <param name="omega" type="matrix" const="true"/>
+  <param name="coeff_white" type="matrix" const="true">
+<description>pre-whitened coeffs.</description>
+  </param>
+  <param name="ai" type="matrixref"/>
+ </params>
+<code>/*  */
+ai = inv( I(cols(omega)) - coeff_white)
+return qform(ai', omega)
+</code>
+</gretl-function>
+<gretl-function name="longrun_cov" type="matrix" private="1">
+ <params count="2">
+  <param name="kernel_est" type="matrix" const="true">
+<description>weights</description>
+  </param>
+  <param name="u" type="matrix" const="true">
+<description>innovations</description>
+  </param>
+ </params>
+<code>/* Compute the long-run covariance matrix. */
+scalar T = rows(u)
+matrix lambda = mshape(0, cols(u), cols(u))
+loop j=1..rows(kernel_est)
+  matrix m = u[1:(T-j),]'u[(1+j):T,]
+  lambda += m * kernel_est[j]
+endloop
+return lambda
+</code>
+</gretl-function>
+<sample-script>
+clear
+set verbose off
+
+include FMOLS.gfn
+
+open denmark.gdt --quiet
+
+
+# Build some regressor(s)
+series spread = IDE - IBO
+list xlist = LRY spread
+
+# Level-based estimation by OLS first
+ols LRM const xlist
+series ec_ols = $uhat
+
+# Run FMOLS with default options
+bundle model = FMOLS(LRM, xlist)
+print model
+
+# Store and plot error-correction term
+series ec_fmols = model.ec
+list EC = ec_ols ec_fmols
+gnuplot EC --with-lines --time-series --output=display \
+  { set title 'Error-correction term'; }
+
+
+# Customize some options for FMOLS
+bundle opts = _(\
+                type_deterministic = &quot;ct&quot;,\
+                type_dgp_x = &quot;c&quot;,\
+                do_prewhite = FALSE,\
+                type_kernel = &quot;parzen&quot;)
+
+bundle model = FMOLS(LRM, xlist, opts)
+print model
+</sample-script>
+</gretl-function-package>
+</gretl-functions>

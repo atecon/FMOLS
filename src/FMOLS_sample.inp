@@ -1,10 +1,10 @@
 clear
 set verbose off
 
-open denmark.gdt
+include FMOLS.gfn
 
-set workdir "/home/at/git/FMOLS"
-include "./src/FMOLS.inp" --force
+open denmark.gdt --quiet
+
 
 # Build some regressor(s)
 series spread = IDE - IBO
@@ -20,7 +20,6 @@ print model
 
 # Store and plot error-correction term
 series ec_fmols = model.ec
-
 list EC = ec_ols ec_fmols
 gnuplot EC --with-lines --time-series --output=display \
   { set title 'Error-correction term'; }
@@ -28,9 +27,10 @@ gnuplot EC --with-lines --time-series --output=display \
 
 # Customize some options for FMOLS
 bundle opts = _(\
-                type_deterministic = "linear_trend",\
-                type_dgp_x = "constant",\
+                type_deterministic = "ct",\
+                type_dgp_x = "c",\
                 do_prewhite = FALSE,\
                 type_kernel = "parzen")
+
 bundle model = FMOLS(LRM, xlist, opts)
 print model

@@ -1,0 +1,92 @@
+This function carries out Fully Modified Least Squares (FMLS) estimation.
+It is essentially a translation (with permission) of the Gauss procedure
+FMPROC included in the suite COINT 2.0, by S. Ouliaris and P.C.B Phillips.
+
+
+References:
+Hansen, B. E. and P. C. B. Phillips (1990), "Estimation and Inference
+in Models of Cointegration: A Simulation Study", Advances in
+Econometrics, Vol. 8, pp. 225-248, Jai Press, Inc.:London.
+
+Phillips, P. C. B. and B. E. Hansen (1990), "Statistical Inference in
+Instrumental Variables Regression with I(1) Process", Review of
+Economic Studies 57, pp. 99-125.
+
+
+The only public function is FMOLS() which has the following arguments:
+
+FMOLS(const series y, const list x, const bundle opts[null])
+==================================================================
+
+Input parameters
+    y:     series, Dependent variable
+    x:     list, Right Hand Side I(1) variables
+    opts:  bundle, Pass user-specific parameters (optional)
+
+
+Return: Bundle holding various information; see below.
+
+
+The FMOLS() function is executed with some default parameter values.
+The user, however, can overwrite the following parameters by passing the
+'opts' bundle:
+==============================================================================
+type_deterministic:
+            string, Select the deterministic to be included.
+                    Options are:
+                    "c": include a constant (default)
+                    "ct": include a constant and linear trend
+                    "ctt": include a constant, linear and quadratic trend
+
+type_dgp_x:
+            string, Select the deterministic which is believed to be
+            describing the stochastic process of the regressors "x".
+            Options are:
+                    "c": include a constant (default)
+                    "ct": include a constant and linear trend
+                    "ctt": include a constant, linear and quadratic trend
+
+do_prewhite:
+            boolean, Perform VAR(1) pre-whitening when calculating
+            covariances of 1 (=TRUE), otherwise not.
+
+prewhitening_lag:
+            int, Lag-length of the VAR(p) for pre-whitening (default p=1)
+
+type_kernel:
+            string, Select the kernel method. Options are:
+                     "quadratic": Quadratic Spectral kernel (default)
+                     "parzen": Parzen kernel
+                     "bartlett": Bartlett kernel
+bandwidth:
+           scalar, Bandwidth for covariance calculation. The special value
+           -1 triggers Andrews' (1991) automatic bandwidth selection. A
+           VAR(1) model is used to calculate the automatic bandwidth.
+
+verbose:
+           boolean, Print any output if 1 (=TRUE) (default), otherwise not.
+
+
+The returned bundle contains:
+=============================
+    bhat_coint: FM estimates of the coefficients on the regressors x
+    bhat_deter: FM estimates of the coefficients on the deterministic regressors
+    se_coint:   FM std. errors of the coefficients on the regressors x
+    se_deter:   FM std. errors of the coefficients on the deterministic
+                regressors
+    vcv:        FM covariance matrix for the vector (bhat_coint bhat_deter)
+    ec:         Series of FM residuals
+    T:          Number of valid observations used
+    ystar:      "Cleaned" endogenous
+    name_endogenous: Name of the dependent variable
+    names_xlist: String array of the exogenous
+
+
+Changelog:
+==========
+v2.0 (April 2021):
+  - Refactored code
+  - Improved and new user-interface with an option to pass bundle of
+    parameters.
+v1.0 (March 2017):
+  - initial version
