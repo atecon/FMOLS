@@ -103,7 +103,7 @@ v1.0 (March 2017):
 <gretl-function name="FMOLS" type="bundle">
  <params count="3">
   <param name="ys" type="series" const="true"/>
-  <param name="xlist" type="list"/>
+  <param name="xlist" type="list" const="true"/>
   <param name="opts" type="bundle" optional="true" const="true"/>
  </params>
 <code>/* Public function calling all necessary steps. */
@@ -222,7 +222,7 @@ return ret
 </gretl-function>
 <gretl-function name="msg_prewhiten" type="string" private="1">
  <params count="1">
-  <param name="do_prewhite" type="bool"/>
+  <param name="do_prewhite" type="bool" const="true"/>
  </params>
 <code>/* For printing only. */
 if do_prewhite
@@ -289,7 +289,7 @@ return map[name]
   <param name="T" type="int"/>
   <param name="ae" type="matrix" const="true"/>
   <param name="se" type="matrix" const="true"/>
-  <param name="ad" type="scalar"/>
+  <param name="ad" type="scalar" const="true"/>
  </params>
 <code>/* Compute bandwidth. */
 if get_kernel_id(type_kernel) == 1       # Quadratic Spectral
@@ -348,7 +348,7 @@ return vec(kernel_est)
 </gretl-function>
 <gretl-function name="check_sample" type="bundle" private="1">
  <params count="1">
-  <param name="L" type="list"/>
+  <param name="L" type="list" const="true"/>
  </params>
 <code>/*  Check for missing values and return sample start and end observations.*/
 scalar Told = $nobs
@@ -364,7 +364,7 @@ return _(t1 = $t1, t2 = $t2)
 </gretl-function>
 <gretl-function name="add_column_dimensions" type="void" private="1">
  <params count="2">
-  <param name="xlist" type="list"/>
+  <param name="xlist" type="list" const="true"/>
   <param name="self" type="bundleref"/>
  </params>
 <code>/*  Determine column dimensions of matrices. */
@@ -374,16 +374,16 @@ scalar self.cols_mymx = 1 + self.cols_mx
 </gretl-function>
 <gretl-function name="get_shortrun_innovations" type="matrix" private="1">
  <params count="2">
-  <param name="xlist" type="list">
+  <param name="xlist" type="list" const="true">
 <description>in levels</description>
   </param>
-  <param name="deter" type="list">
+  <param name="deter" type="list" const="true">
 <description>Deterministics</description>
   </param>
  </params>
 <code>/* Compute short-term innovations: deviations of 1st-differences from deterministics. */
 list sdx = diff(xlist)
-smpl sdx --no-missing
+smpl sdx deter --no-missing
 matrix u = mshape(NA, $nobs, 1)
 mols({sdx}, {deter}, &amp;u)
 return u
@@ -394,7 +394,7 @@ return u
   <param name="y" type="series" const="true">
 <description>Endogenous in levels</description>
   </param>
-  <param name="xlist" type="list">
+  <param name="xlist" type="list" const="true">
 <description>levels + deterministics</description>
   </param>
  </params>
@@ -408,7 +408,7 @@ return $uhat
 <gretl-function name="est_var_model" type="matrix" private="1">
  <params count="3">
   <param name="m" type="matrix" const="true"/>
-  <param name="max_lag" type="int" min="1"/>
+  <param name="max_lag" type="int" min="1" const="true"/>
   <param name="uhat" type="matrixref"/>
  </params>
 <code>/* Estimate a VAR model by mols(). Return coefficient matrix. */
@@ -446,7 +446,7 @@ return map[type]
 <gretl-function name="fmols_est" type="bundle" private="1">
  <params count="3">
   <param name="ys" type="series" const="true"/>
-  <param name="xlist_deter" type="list"/>
+  <param name="xlist_deter" type="list" const="true"/>
   <param name="self" type="bundle" const="true"/>
  </params>
 <code>/* Actual FMOLS estimator. */

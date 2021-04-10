@@ -204,7 +204,7 @@ function matrix get_shortrun_innovations (const list xlist "in levels",
     /* Compute short-term innovations: deviations of 1st-differences from deterministics. */
 
     list sdx = diff(xlist)
-    smpl sdx --no-missing
+    smpl sdx deter --no-missing
     matrix u = mshape(NA, $nobs, 1)
 
     mols({sdx}, {deter}, &u)
