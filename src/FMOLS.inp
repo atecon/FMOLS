@@ -391,9 +391,10 @@ function bundle fmols_est (const series ys,
     scalar n_yxlist = self.cols_mymx
     scalar n_xlist = self.cols_mx
 
-    g = mols(self.omega[2:n_yxlist, 1], self.omega[2:n_yxlist, 2:n_yxlist])
+    matrix g = mols(self.omega[2:n_yxlist, 1],\
+                    self.omega[2:n_yxlist, 2:n_yxlist])
 
-    delta_g = self.delta[2:n_yxlist, 1] - self.delta[2:n_yxlist, 2:n_yxlist] * g
+    matrix delta_g = self.delta[2:n_yxlist, 1] - self.delta[2:n_yxlist, 2:n_yxlist] * g
     scalar k = get_trend_powermax(self.type_deterministic)
     delta_g |= zeros((k + 1), 1)    # this is "M*"
 

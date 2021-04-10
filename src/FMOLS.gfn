@@ -454,8 +454,8 @@ smpl (1 + self.t1) ;
 bundle B
 scalar n_yxlist = self.cols_mymx
 scalar n_xlist = self.cols_mx
-g = mols(self.omega[2:n_yxlist, 1], self.omega[2:n_yxlist, 2:n_yxlist])
-delta_g = self.delta[2:n_yxlist, 1] - self.delta[2:n_yxlist, 2:n_yxlist] * g
+matrix g = mols(self.omega[2:n_yxlist, 1], self.omega[2:n_yxlist, 2:n_yxlist])
+matrix delta_g = self.delta[2:n_yxlist, 1] - self.delta[2:n_yxlist, 2:n_yxlist] * g
 scalar k = get_trend_powermax(self.type_deterministic)
 delta_g |= zeros((k + 1), 1)    # this is &quot;M*&quot;
 # Clean &quot;y&quot;
