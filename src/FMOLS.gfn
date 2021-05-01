@@ -84,7 +84,7 @@ The returned bundle contains:
     se_deter:   FM std. errors of the coefficients on the deterministic
                 regressors
     vcv:        FM covariance matrix for the vector (bhat_coint bhat_deter)
-    ec:         Series of FM residuals
+    uhat:       FM residuals
     T:          Number of valid observations used
     ystar:      &quot;Cleaned&quot; endogenous
     name_endogenous: Name of the dependent variable
@@ -93,7 +93,7 @@ The returned bundle contains:
 
 Changelog:
 ==========
-v2.0 (April 2021):
+v2.0 (May 2021):
   - Refactored code
   - Improved and new user-interface with an option to pass bundle of
     parameters.
@@ -475,7 +475,7 @@ matrix B.vcv = xxi * sg
 matrix se = sqrt(diag(B.vcv))
 matrix B.se_coint = se[1:n_xlist]
 matrix B.se_deter = se[(n_xlist + 1):]
-matrix B.ec = B.ystar - {xlist_deter} * bhat  # error-correction term
+matrix B.uhat = ys - {xlist_deter} * bhat
 return B
 </code>
 </gretl-function>

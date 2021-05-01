@@ -420,7 +420,7 @@ function bundle fmols_est (const series ys,
     matrix B.se_coint = se[1:n_xlist]
     matrix B.se_deter = se[(n_xlist + 1):]
 
-    matrix B.ec = B.ystar - {xlist_deter} * bhat  # error-correction term
+    matrix B.uhat = ys - {xlist_deter} * bhat
 
     return B
 end function

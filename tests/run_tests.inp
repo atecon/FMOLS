@@ -78,7 +78,7 @@ Parameters = Parameters + _(type_deterministic = "c",\
                             expected_v_vec = {0.016688; -0.025723;\
                                             -0.10105; 0.0000; 0.19511;\
                                             0.16602; 0.0000; 0.0000; 0.61259},\
-                            expected_sd_ec = 0.061586866\
+                            expected_sd_uhat = 0.0494721\
                             )
 
 Parameters = Parameters + _(type_deterministic = "ct",\
@@ -95,7 +95,7 @@ Parameters = Parameters + _(type_deterministic = "ct",\
                                               0.0000; 0.60052; 0.00033044;\
                                               0.0000; 0.0000; 0.0000;\
                                               3.8357e-07},\
-                            expected_sd_ec = 0.071308584\
+                            expected_sd_uhat = 0.0467072\
                             )
 function void test_FMOLS (const bundles P, const series y, const list L)
     print "Start testing FMOLS()."
@@ -126,7 +126,7 @@ function void test_FMOLS (const bundles P, const series y, const list L)
         loop j=1..rows(v_vec)
             assert_almost_equal_num(v_vec[j], P[i].expected_v_vec[j], 1e-3)
         endloop
-        assert_almost_equal_num(sd(model.ec), P[i].expected_sd_ec, 1e-5)
+        assert_almost_equal_num(sd(model.uhat), P[i].expected_sd_uhat, 1e-5)
     endloop
 end function
 test_FMOLS(Parameters, LRM, xlist)
