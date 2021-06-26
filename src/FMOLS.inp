@@ -244,7 +244,7 @@ end function
 
 
 function bundle fmols_defaults (void)
-    /*  set and return default values. */
+    /*  Set and return default values. */
 
     bundle B
 
@@ -273,6 +273,20 @@ function scalar get_trend_powermax (const string type)
 end function
 
 
+function void format_type_strings (bundle *self)
+    /* Format specific string values
+    return: void */
+
+    strings keys = defarray("type_deterministic",\
+                            "type_dgp_x",\
+                            "type_kernel"\
+                            )
+    loop foreach i keys
+        self["$i"] = tolower(self["$i"])
+    endloop
+end function
+
+
 function bundle FMOLS (const series ys,
                        const list xlist,
                        const bundle opts[null])
@@ -284,9 +298,8 @@ function bundle FMOLS (const series ys,
         self = opts + self
     endif
 
-    self.type_deterministic = tolower(self.type_deterministic)
-    self.type_dgp_x = tolower(self.type_dgp_x)
-    self.type_kernel = tolower(self.type_kernel)
+    format_type_strings(&self)
+
     string self.name_endogenous = argname(ys)
     string self.names_xlist = varname(xlist)
 

@@ -133,5 +133,29 @@ test_FMOLS(Parameters, LRM, xlist)
 
 
 
+function void test_format_type_strings (void)
+    print "Start testing function format_type_strings()"
+
+    # Given
+    bundle actual = _(type_deterministic = "DeT",\
+                      type_dgp_x = "FoO",\
+                      type_kernel = "QUadRatic")
+
+    bundle expected = _(type_deterministic = "det",\
+                       type_dgp_x = "foo",\
+                       type_kernel = "quadratic")
+
+    # When
+    format_type_strings(&actual)
+
+    # Then
+    loop foreach i actual
+        assert(actual["$i"] == expected["$i"])
+    endloop
+end function
+test_format_type_strings()
+
+
+
 print "Finished all tests succesfully."
 quit
