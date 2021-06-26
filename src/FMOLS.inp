@@ -135,7 +135,7 @@ end function
 function scalar compute_bandwidth (const matrix mat,
                                    const string type_kernel)
     /* Compute optimal bandwidth.
-    return: scalar value of optimal bandwidth. */
+    return: scalar, value of optimal bandwidth. */
 
     scalar T = rows(mat)
 
@@ -154,7 +154,8 @@ end function
 function matrix compute_kernel (int T[1::],
                                 const string type_kernel,
                                 scalar bandwidth)
-    /* Compute kernel-based weights. */
+    /* Compute kernel-based weights.
+    return: matrix, vector of weights. */
 
     matrix jb = seq(1, (T-1)) ./ bandwidth
 
@@ -201,13 +202,13 @@ end function
 
 function matrix get_shortrun_innovations (const list xlist "in levels",
                                           const list deter "Deterministics")
-    /* Compute short-term innovations: deviations of 1st-differences from deterministics. */
+    /* Compute short-term innovations: clean differences from deterministics. */
 
-    list sdx = diff(xlist)
-    smpl sdx deter --no-missing
+    list Dxlist = diff(xlist)
+    smpl Dxlist deter --no-missing
     matrix u = mshape(NA, $nobs, 1)
 
-    mols({sdx}, {deter}, &u)
+    mols({Dxlist}, {deter}, &u)
 
     return u
 end function
@@ -215,7 +216,8 @@ end function
 
 function series get_longrun_innovations (const series y "Endogenous in levels",
                                          const list xlist "levels + deterministics")
-    /* Compute long-run coefficient vector and return residuals which are equivalent to deviations from long-run relationship. */
+    /* Compute long-run coefficient vector and return residuals which are equivalent to deviations from long-run relationship.
+    return: series, residuals */
 
     smpl y xlist --no-missing
 
@@ -287,6 +289,22 @@ function void format_type_strings (bundle *self)
 end function
 
 
+function list matrix_to_list (const matrix m,
+                              string suffix[null])
+    /* Cast column vectors to series and add to list.
+    return: list, column vectors as list */
+
+    list L
+    string suffix = exists(suffix) ? suffix : ""
+
+    loop i=1..cols(m)
+        list L += genseries(sprintf("%s%s", cnameget(m)[i], suffix), m[,i])
+    endloop
+
+    return L
+end function
+
+
 function bundle FMOLS (const series ys,
                        const list xlist,
                        const bundle opts[null])
@@ -308,20 +326,16 @@ function bundle FMOLS (const series ys,
     scalar self.T = $nobs
     add_column_dimensions(xlist, &self)
 
-    list det_levels, det_dynamics
+    list det_dynamics
     matrix mtmp = timepoly($nobs,\
                            get_trend_powermax(self.type_deterministic))
-    loop i=1..cols(mtmp)
-        det_levels += genseries(sprintf("%s", cnameget(mtmp)[i]), mtmp[,i])
-    endloop
+    list det_levels = matrix_to_list(mtmp)
 
-    # one obs. lost due to differencing for changes in levels
+
+    # one observation lost due to differencing of level series
     smpl (self.t1+1) ;
     matrix mtmp = timepoly($nobs, get_trend_powermax(self.type_dgp_x))
-    loop i=1..cols(mtmp)
-        det_dynamics += genseries(sprintf("%s_dyn", cnameget(mtmp)[i]),\
-                                  mtmp[,i])
-    endloop
+    list det_dynamics = matrix_to_list(mtmp, "_dyn")
 
     # OLS regression of levels + deterministics
     list xlist_deter = xlist det_levels
@@ -329,7 +343,7 @@ function bundle FMOLS (const series ys,
     series lrun_innovations = get_longrun_innovations(ys, xlist_deter)
 
     # Construct errors of dynamics: Has (T-1) observations due to differencing
-    # Note: ols command not applicable as sdx can have multiple columns
+    # Note: ols command not applicable as xlist can have multiple columns
     smpl full
     matrix self.srun_innovations = get_shortrun_innovations(xlist, det_dynamics)
 
@@ -338,7 +352,7 @@ function bundle FMOLS (const series ys,
 
     # Concatenate errors
     matrix innovations = {lrun_innovations} ~ self.srun_innovations
-    vcv_innovations = innovations'innovations
+    matrix vcv_innovations = innovations'innovations
 
     if self.do_prewhite             # Pre-white residuals using VAR(p)
         matrix innovations_white
@@ -361,13 +375,6 @@ function bundle FMOLS (const series ys,
 
     # long-run covariance matrix
     matrix lambda = longrun_cov(kernel_est, innovations_white)
-    # TODO: Could longrun_cov be replaced by?
-    /* Does not lead the same results!
-    set hac_prewhiten on
-    set hac_lag nw1 #self.prewhitening_lag
-    set hac_kernel qs
-    matrix my_lambda = lrcovar(innovations_white, FALSE)
-    */
 
     matrix self.delta = sigma + lambda
     matrix self.omega = self.delta + lambda'
@@ -380,6 +387,8 @@ function bundle FMOLS (const series ys,
     endif
 
     bundle model = fmols_est(ys, xlist_deter, self)
+    print model
+    stop
     model.T = self.T
     model.name_endogenous = argname(ys)
     model.names_xlist = varnames(xlist)
@@ -421,16 +430,12 @@ function bundle fmols_est (const series ys,
     matrix xxi = invpd(m_xlist_deter'm_xlist_deter)
 
     matrix bhat = xxi * (m_xlist_deter'B.ystar - delta_g)
-    matrix B.bhat_coint = bhat[1:n_xlist]
-    matrix B.bhat_deter = bhat[(n_xlist + 1):]
 
     #  Covariance matrix
     matrix sg = (self.omega[1,1] - self.omega[1,2:n_yxlist] * g) / $nobs
     matrix B.vcv = xxi * sg
 
-    matrix se = sqrt(diag(B.vcv))
-    matrix B.se_coint = se[1:n_xlist]
-    matrix B.se_deter = se[(n_xlist + 1):]
+    matrix stderr = sqrt(diag(B.vcv))
 
     matrix B.uhat = ys - {xlist_deter} * bhat
 

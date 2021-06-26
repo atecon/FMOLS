@@ -100,9 +100,7 @@ Parameters = Parameters + _(type_deterministic = "ct",\
 function void test_FMOLS (const bundles P, const series y, const list L)
     print "Start testing FMOLS()."
 
-    loop foreach i P
-        print i
-        # Given
+    loop foreach i P        # Given
         bundle model = null
         #string target = P[i].target
         #string features = P[i].features
