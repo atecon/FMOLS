@@ -183,8 +183,8 @@ function bundle check_sample (const list L)
 
     scalar Tdiff = Told - Tnew
     if Tdiff && self.verbose
-        printf "\nWarning: Dropped %d observations due to missing values.\n", Tdiff
-        printf "\nInfo: Sample range: %s to %s.\n", obslabe($t1), obslabe($t2)
+        printf "\nWARNING: Dropped %d observations due to missing values.\n", Tdiff
+        printf "\nINFO: Sample range: %s to %s.\n", obslabe($t1), obslabe($t2)
     endif
 
     return _(t1 = $t1, t2 = $t2)
@@ -308,8 +308,7 @@ function bundle FMOLS (const series ys,
     scalar self.T = $nobs
     add_column_dimensions(xlist, &self)
 
-    list det_levels
-    list det_dynamics
+    list det_levels, det_dynamics
     matrix mtmp = timepoly($nobs,\
                            get_trend_powermax(self.type_deterministic))
     loop i=1..cols(mtmp)
