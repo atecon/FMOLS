@@ -19,7 +19,7 @@ bundle model = FMOLS(LRM, xlist)
 print model
 
 # Store and plot error-correction term
-series ec_fmols = model.ec
+series ec_fmols = model.uhat
 list EC = ec_ols ec_fmols
 gnuplot EC --with-lines --time-series --output=display \
   { set title 'Error-correction term'; }

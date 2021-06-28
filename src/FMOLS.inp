@@ -46,39 +46,51 @@ function string msg_prewhiten (const bool do_prewhite)
 end function
 
 
-function void print_results (const bundle self, const bundle model)
+function matrix get_stats (const bundle self)
+    /* Compile vector of model statistics
+    return: matrix, column vector of statistics. */
+
+    matrix stats = self.ess | self.sigma | self.aic | self.aicc | \
+                    self.bic | self.hqc | self.df
+
+    strings label = defarray("Sum squared resid",\
+                              "S.E. of regression",\
+                              "Akaike criterion",\
+                              "Akaike corrected",\
+                              "Schwarz criterion",\
+                              "Hannan-Quinn",\
+                              "Degrees of freedom"\
+                              )
+
+    rnameset(stats, label)
+
+    return stats
+end function
+
+
+function void print_results (const bundle model)
     /* Print estimation results. */
 
-    matrix b1m = model.bhat_coint ~ model.se_coint
-    matrix b2m = model.bhat_deter ~ model.se_deter
-    string names_xlist = self.names_xlist
+    matrix coeff_se = model.coeff ~ model.stderr
+    strings label = model.parnames
+    matrix stats = get_stats(model)
+    label += rnameget(stats)
 
-    names_deterministics = msg_type_dgp_x(self.type_deterministic)
-    names_deterministics = strsub(names_deterministics, ",", "")
-    names_deterministics = tolower(strsub(names_deterministics, "and", ""))
-    string msg_type_dgp_x = msg_type_dgp_x(self.type_dgp_x)
-    string msg_whiten = msg_prewhiten(self.do_prewhite)
-    string msg_kernel = sprintf(" %s", toupper(self.type_kernel))
+    string msg_type_dgp_x = msg_type_dgp_x(model.type_dgp_x)
+    string msg_whiten = msg_prewhiten(model.do_prewhite)
+    string msg_kernel = sprintf(" %s", toupper(model.type_kernel))
 
-    if self.bandwidth == -1
-        msg_band = sprintf("(automatic) estimate: %5.3g\n", self.bandwidth_value)
+    if model.bandwidth == -1
+        msg_band = sprintf("(automatic) estimate: %5.3g\n", model.bandwidth_value)
     else
-        msg_band = sprintf("preset at: %2.3g\n", self.bandwidth_value)
+        msg_band = sprintf("preset at: %2.3g\n", model.bandwidth_value)
     endif
 
     print  "======================================================================"
-    print "Fully Modified Least Squares Regression"
-    printf "using observations %s-%s (T = %d)\n", obslabel(self.t1),\
-        obslabel(self.t2), self.T
-    printf "Dependent variable: %s\n", self.name_endogenous
-    print  "_____________________________________________________________________"
-    print  ""
-    print  "  I(1) variables"
-    modprint b1m names_xlist
-    print ""
-    print "Deterministic terms"
-    modprint b2m names_deterministics
-
+    print "Cointegrating regression"
+    printf "FMOLS, using observations %s-%s (T = %d)\n\n", obslabel(model.t1),\
+        obslabel(model.t2), model.T
+    printf "Dependent variable: %s\n", model.depvar
     printf "Assumed regressor deterministics:"
     print msg_type_dgp_x
 
@@ -91,7 +103,11 @@ function void print_results (const bundle self, const bundle model)
     printf "Bandwidth "
     print msg_band
 
-    print  "======================================================================\n\n"
+    print  "_____________________________________________________________________"
+
+    modprint coeff_se label stats
+
+    print  "======================================================================"
 end function
 
 
@@ -386,20 +402,39 @@ function bundle FMOLS (const series ys,
                                           vcv_innovations)
     endif
 
+    # Fill the model bundle
     bundle model = fmols_est(ys, xlist_deter, self)
-    print model
-    stop
-    model.T = self.T
-    model.name_endogenous = argname(ys)
-    model.names_xlist = varnames(xlist)
+    strings model.parnames = varnames(xlist_deter)
+    rnameset(model.coeff, model.parnames)
+    model.df = model.T - rows(model.coeff)
+    model.depvar = argname(ys)
+    add_info_criteria(&model)
+    model.type_kernel = self.type_kernel
+    model.type_dgp_x = self.type_dgp_x
+    model.type_deterministic = self.type_deterministic
+    model.do_prewhite = self.do_prewhite
+    model.bandwidth_value = self.bandwidth_value
+    model.bandwidth = self.bandwidth
 
     if self.verbose
-        print_results(self, model)
+        print_results(model)
     endif
 
     return model
 end function
 
+
+function void add_info_criteria (bundle *self)
+    /* Add information criteria
+    return: void */
+
+    strings names = defarray("aic", "bic", "hqc", "aicc")
+    matrix cr = criteria(self.ess, self.T, rows(self.coeff))
+
+    loop foreach i names
+        scalar self["$i"] = cr[i]
+    endloop
+end function
 
 function bundle fmols_est (const series ys,
                            const list xlist_deter,
@@ -422,22 +457,28 @@ function bundle fmols_est (const series ys,
     # Clean "y"
     series mask = 1
     smpl full
-    matrix B.ystar = ys - self.srun_innovations * g
+    matrix ystar = ys - self.srun_innovations * g
     smpl mask == 1 --restrict
+    B.t1 = $t1
+    B.t2 = $t2
+    B.T = $nobs
 
     # Cointegrating vector based on clean "y"
     matrix m_xlist_deter = {xlist_deter}
     matrix xxi = invpd(m_xlist_deter'm_xlist_deter)
 
-    matrix bhat = xxi * (m_xlist_deter'B.ystar - delta_g)
+    matrix B.coeff = xxi * (m_xlist_deter'ystar - delta_g)
 
     #  Covariance matrix
     matrix sg = (self.omega[1,1] - self.omega[1,2:n_yxlist] * g) / $nobs
     matrix B.vcv = xxi * sg
+    matrix B.stderr = sqrt(diag(B.vcv))
 
-    matrix stderr = sqrt(diag(B.vcv))
-
-    matrix B.uhat = ys - {xlist_deter} * bhat
+    series yhat = {xlist_deter} * B.coeff
+    series B.yhat = yhat
+    series B.uhat = ys - B.yhat
+    scalar B.ess = sst(B.uhat)
+    scalar B.sigma = sd(B.uhat)
 
     return B
 end function

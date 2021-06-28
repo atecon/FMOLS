@@ -1,7 +1,7 @@
 author = Stefano Fachin, Riccardo "Jack" Lucchetti and Artur Tarassow
 email = stefano.fachin@uniroma1.it
 version = 2.0
-date = 2021-04-09
+date = 2021-06-26
 description = Fully Modified Least Squares Estimation for I(1) variables
 tags = C13 C52
 min-version = 2020c
@@ -11,3 +11,4 @@ help = FMOLS_help.txt
 sample-script = FMOLS_sample.inp
 #label = OPTIONAL
 #menu-attachment = MAINWIN/Model/LinearModels
+depends = criteria

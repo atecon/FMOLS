@@ -3,7 +3,7 @@
 <gretl-function-package name="FMOLS" minver="2020c">
 <author email="stefano.fachin@uniroma1.it">Stefano Fachin, Riccardo &quot;Jack&quot; Lucchetti and Artur Tarassow</author>
 <version>2.0</version>
-<date>2021-04-09</date>
+<date>2021-06-26</date>
 <description>Fully Modified Least Squares Estimation for I(1) variables</description>
 <tags>C13 C52</tags>
 <help>
@@ -30,7 +30,7 @@ FMOLS(const series y, const list x, const bundle opts[null])
 Input parameters
     y:     series, Dependent variable
     x:     list, Right Hand Side I(1) variables
-    opts:  bundle, Pass user-specific parameters (optional)
+    opts:  bundle, Pass user-specific parameters (optional, see below)
 
 
 Return: Bundle holding various information; see below.
@@ -78,28 +78,41 @@ verbose:
 
 The returned bundle contains:
 =============================
-    bhat_coint: FM estimates of the coefficients on the regressors x
-    bhat_deter: FM estimates of the coefficients on the deterministic regressors
-    se_coint:   FM std. errors of the coefficients on the regressors x
-    se_deter:   FM std. errors of the coefficients on the deterministic
-                regressors
-    vcv:        FM covariance matrix for the vector (bhat_coint bhat_deter)
-    uhat:       FM residuals
-    T:          Number of valid observations used
-    ystar:      &quot;Cleaned&quot; endogenous
-    name_endogenous: Name of the dependent variable
+    coeff:      matrix, Estimates of the estimated coefficients
+    stderr:     matrix, Standard error of the coefficients
+    vcv:        matrix, Square matrix containing the estimated covariance matrix
+                for the coefficients
+    sigma:      scalar, Standard error of the regression
+    df:         int, Degrees of freedom
+    uhat:       series, Estimated residuals
+    yhat:       series, Fitted values
+    T:          int, Number of valid observations used
+    t1:         int, Index of the initial observation used for estimation
+    t2:         int, Index of the last observation used for estimation
+    depvar:     string, Name of the dependent variable
+    parnames:   strings, Array of names of the exogenous variables
     names_xlist: String array of the exogenous
+    aic:        scalar, Akaike information criteria
+    aicc:       scalar, corrected Akaike information criteria
+    bic:        scalar, Schwarz information criteria
+    hqc:        scalar, Hannan-Quinn information criteria
+    bandwidth_value:  scalar, value of (automatically selected) bandwidth
+
 
 
 Changelog:
 ==========
-v2.0 (May 2021):
+v2.0 (June 2021):
   - Refactored code
   - Improved and new user-interface with an option to pass bundle of
     parameters.
+  - Improved printout
+  - Return model bundle including various information on estimation
 v1.0 (March 2017):
   - initial version
 </help>
+<depends count="1">
+criteria </depends>
 <gretl-function name="FMOLS" type="bundle">
  <params count="3">
   <param name="ys" type="series" const="true"/>
@@ -111,40 +124,33 @@ bundle self = fmols_defaults()
 if exists(opts)
   self = opts + self
 endif
-self.type_deterministic = tolower(self.type_deterministic)
-self.type_dgp_x = tolower(self.type_dgp_x)
-self.type_kernel = tolower(self.type_kernel)
+format_type_strings(&amp;self)
 string self.name_endogenous = argname(ys)
 string self.names_xlist = varname(xlist)
 self = self + check_sample(deflist(ys, xlist))
 smpl self.t1 self.t2
 scalar self.T = $nobs
 add_column_dimensions(xlist, &amp;self)
-list det_levels
 list det_dynamics
 matrix mtmp = timepoly($nobs, get_trend_powermax(self.type_deterministic))
-loop i=1..cols(mtmp)
-  det_levels += genseries(sprintf(&quot;%s&quot;, cnameget(mtmp)[i]), mtmp[,i])
-endloop
-# one obs. lost due to differencing for changes in levels
+list det_levels = matrix_to_list(mtmp)
+# one observation lost due to differencing of level series
 smpl (self.t1+1) ;
 matrix mtmp = timepoly($nobs, get_trend_powermax(self.type_dgp_x))
-loop i=1..cols(mtmp)
-  det_dynamics += genseries(sprintf(&quot;%s_dyn&quot;, cnameget(mtmp)[i]), mtmp[,i])
-endloop
+list det_dynamics = matrix_to_list(mtmp, &quot;_dyn&quot;)
 # OLS regression of levels + deterministics
 list xlist_deter = xlist det_levels
 smpl (self.t1 + 1) ;
 series lrun_innovations = get_longrun_innovations(ys, xlist_deter)
 # Construct errors of dynamics: Has (T-1) observations due to differencing
-# Note: ols command not applicable as sdx can have multiple columns
+# Note: ols command not applicable as xlist can have multiple columns
 smpl full
 matrix self.srun_innovations = get_shortrun_innovations(xlist, det_dynamics)
 smpl (self.t1 + 1) ;
 matrix xdx = {xlist_deter}'self.srun_innovations
 # Concatenate errors
 matrix innovations = {lrun_innovations} ~ self.srun_innovations
-vcv_innovations = innovations'innovations
+matrix vcv_innovations = innovations'innovations
 if self.do_prewhite             # Pre-white residuals using VAR(p)
   matrix innovations_white
   matrix coeff_white = est_var_model(innovations, self.prewhitening_lag, &amp;innovations_white)
@@ -160,13 +166,6 @@ matrix kernel_est = compute_kernel(self.Teffective, self.type_kernel, self.bandw
 matrix sigma = innovations_white'innovations_white
 # long-run covariance matrix
 matrix lambda = longrun_cov(kernel_est, innovations_white)
-# TODO: Could longrun_cov be replaced by?
-/* Does not lead the same results!
-set hac_prewhiten on
-set hac_lag nw1 #self.prewhitening_lag
-set hac_kernel qs
-matrix my_lambda = lrcovar(innovations_white, FALSE)
-*/
 matrix self.delta = sigma + lambda
 matrix self.omega = self.delta + lambda'
 if self.do_prewhite
@@ -174,12 +173,21 @@ if self.do_prewhite
   matrix self.omega = recolor_omega(self.omega, coeff_white, &amp;ai)
   matrix self.delta = recolor_delta(self.delta, coeff_white, ai, vcv_innovations)
 endif
+# Fill the model bundle
 bundle model = fmols_est(ys, xlist_deter, self)
-model.T = self.T
-model.name_endogenous = argname(ys)
-model.names_xlist = varnames(xlist)
+strings model.parnames = varnames(xlist_deter)
+rnameset(model.coeff, model.parnames)
+model.df = model.T - rows(model.coeff)
+model.depvar = argname(ys)
+add_info_criteria(&amp;model)
+model.type_kernel = self.type_kernel
+model.type_dgp_x = self.type_dgp_x
+model.type_deterministic = self.type_deterministic
+model.do_prewhite = self.do_prewhite
+model.bandwidth_value = self.bandwidth_value
+model.bandwidth = self.bandwidth
 if self.verbose
-  print_results(self, model)
+  print_results(model)
 endif
 return model
 </code>
@@ -232,37 +240,39 @@ else
 endif
 </code>
 </gretl-function>
-<gretl-function name="print_results" type="void" private="1">
- <params count="2">
+<gretl-function name="get_stats" type="matrix" private="1">
+ <params count="1">
   <param name="self" type="bundle" const="true"/>
+ </params>
+<code>/* Compile vector of model statistics
+return: matrix, column vector of statistics. */
+matrix stats = self.ess | self.sigma | self.aic | self.aicc | self.bic | self.hqc | self.df
+strings label = defarray(&quot;Sum squared resid&quot;, &quot;S.E. of regression&quot;, &quot;Akaike criterion&quot;, &quot;Akaike corrected&quot;, &quot;Schwarz criterion&quot;, &quot;Hannan-Quinn&quot;, &quot;Degrees of freedom&quot; )
+rnameset(stats, label)
+return stats
+</code>
+</gretl-function>
+<gretl-function name="print_results" type="void" private="1">
+ <params count="1">
   <param name="model" type="bundle" const="true"/>
  </params>
 <code>/* Print estimation results. */
-matrix b1m = model.bhat_coint ~ model.se_coint
-matrix b2m = model.bhat_deter ~ model.se_deter
-string names_xlist = self.names_xlist
-names_deterministics = msg_type_dgp_x(self.type_deterministic)
-names_deterministics = strsub(names_deterministics, &quot;,&quot;, &quot;&quot;)
-names_deterministics = tolower(strsub(names_deterministics, &quot;and&quot;, &quot;&quot;))
-string msg_type_dgp_x = msg_type_dgp_x(self.type_dgp_x)
-string msg_whiten = msg_prewhiten(self.do_prewhite)
-string msg_kernel = sprintf(&quot; %s&quot;, toupper(self.type_kernel))
-if self.bandwidth == -1
-  msg_band = sprintf(&quot;(automatic) estimate: %5.3g\n&quot;, self.bandwidth_value)
+matrix coeff_se = model.coeff ~ model.stderr
+strings label = model.parnames
+matrix stats = get_stats(model)
+label += rnameget(stats)
+string msg_type_dgp_x = msg_type_dgp_x(model.type_dgp_x)
+string msg_whiten = msg_prewhiten(model.do_prewhite)
+string msg_kernel = sprintf(&quot; %s&quot;, toupper(model.type_kernel))
+if model.bandwidth == -1
+  msg_band = sprintf(&quot;(automatic) estimate: %5.3g\n&quot;, model.bandwidth_value)
 else
-  msg_band = sprintf(&quot;preset at: %2.3g\n&quot;, self.bandwidth_value)
+  msg_band = sprintf(&quot;preset at: %2.3g\n&quot;, model.bandwidth_value)
 endif
 print  &quot;======================================================================&quot;
-print &quot;Fully Modified Least Squares Regression&quot;
-printf &quot;using observations %s-%s (T = %d)\n&quot;, obslabel(self.t1), obslabel(self.t2), self.T
-printf &quot;Dependent variable: %s\n&quot;, self.name_endogenous
-print  &quot;_____________________________________________________________________&quot;
-print  &quot;&quot;
-print  &quot;  I(1) variables&quot;
-modprint b1m names_xlist
-print &quot;&quot;
-print &quot;Deterministic terms&quot;
-modprint b2m names_deterministics
+print &quot;Cointegrating regression&quot;
+printf &quot;FMOLS, using observations %s-%s (T = %d)\n\n&quot;, obslabel(model.t1), obslabel(model.t2), model.T
+printf &quot;Dependent variable: %s\n&quot;, model.depvar
 printf &quot;Assumed regressor deterministics:&quot;
 print msg_type_dgp_x
 printf &quot;Method of estimation of covariance parameters:&quot;
@@ -271,7 +281,9 @@ printf &quot;Kernel:&quot;
 print msg_kernel
 printf &quot;Bandwidth &quot;
 print msg_band
-print  &quot;======================================================================\n\n&quot;
+print  &quot;_____________________________________________________________________&quot;
+modprint coeff_se label stats
+print  &quot;======================================================================&quot;
 </code>
 </gretl-function>
 <gretl-function name="get_kernel_id" type="scalar" private="1">
@@ -313,7 +325,7 @@ return eband
   <param name="type_kernel" type="string" const="true"/>
  </params>
 <code>/* Compute optimal bandwidth.
-return: scalar value of optimal bandwidth. */
+return: scalar, value of optimal bandwidth. */
 scalar T = rows(mat)
 matrix eb = mat[1:(T-1),]
 matrix ef = mat[2:T,]
@@ -330,7 +342,8 @@ return bwidth(type_kernel, T, ae, se, ad)
   <param name="type_kernel" type="string" const="true"/>
   <param name="bandwidth" type="scalar"/>
  </params>
-<code>/* Compute kernel-based weights. */
+<code>/* Compute kernel-based weights.
+return: matrix, vector of weights. */
 matrix jb = seq(1, (T-1)) ./ bandwidth
 if get_kernel_id(type_kernel) == 1   # Quadratic Spectral
   jband = jb * 1.2 * $pi
@@ -356,8 +369,8 @@ smpl L --contiguous
 scalar Tnew = $nobs
 scalar Tdiff = Told - Tnew
 if Tdiff &amp;&amp; self.verbose
-  printf &quot;\nWarning: Dropped %d observations due to missing values.\n&quot;, Tdiff
-  printf &quot;\nInfo: Sample range: %s to %s.\n&quot;, obslabe($t1), obslabe($t2)
+  printf &quot;\nWARNING: Dropped %d observations due to missing values.\n&quot;, Tdiff
+  printf &quot;\nINFO: Sample range: %s to %s.\n&quot;, obslabe($t1), obslabe($t2)
 endif
 return _(t1 = $t1, t2 = $t2)
 </code>
@@ -381,11 +394,11 @@ scalar self.cols_mymx = 1 + self.cols_mx
 <description>Deterministics</description>
   </param>
  </params>
-<code>/* Compute short-term innovations: deviations of 1st-differences from deterministics. */
-list sdx = diff(xlist)
-smpl sdx deter --no-missing
+<code>/* Compute short-term innovations: clean differences from deterministics. */
+list Dxlist = diff(xlist)
+smpl Dxlist deter --no-missing
 matrix u = mshape(NA, $nobs, 1)
-mols({sdx}, {deter}, &amp;u)
+mols({Dxlist}, {deter}, &amp;u)
 return u
 </code>
 </gretl-function>
@@ -398,7 +411,8 @@ return u
 <description>levels + deterministics</description>
   </param>
  </params>
-<code>/* Compute long-run coefficient vector and return residuals which are equivalent to deviations from long-run relationship. */
+<code>/* Compute long-run coefficient vector and return residuals which are equivalent to deviations from long-run relationship.
+return: series, residuals */
 smpl y xlist --no-missing
 catch ols y xlist --quiet
 errorif($error, &quot;Level estimation failed. Abort.&quot;)
@@ -422,7 +436,7 @@ return bhat
 </code>
 </gretl-function>
 <gretl-function name="fmols_defaults" type="bundle" private="1">
-<code>/*  set and return default values. */
+<code>/*  Set and return default values. */
 bundle B
 string B.type_deterministic = &quot;c&quot;
 string B.type_dgp_x = &quot;c&quot;
@@ -443,6 +457,46 @@ bundle map = _( c = 0, ct = 1, ctt = 2 )
 return map[type]
 </code>
 </gretl-function>
+<gretl-function name="format_type_strings" type="void" private="1">
+ <params count="1">
+  <param name="self" type="bundleref"/>
+ </params>
+<code>/* Format specific string values
+return: void */
+strings keys = defarray(&quot;type_deterministic&quot;, &quot;type_dgp_x&quot;, &quot;type_kernel&quot; )
+loop foreach i keys
+  self[&quot;$i&quot;] = tolower(self[&quot;$i&quot;])
+endloop
+</code>
+</gretl-function>
+<gretl-function name="matrix_to_list" type="list" private="1">
+ <params count="2">
+  <param name="m" type="matrix" const="true"/>
+  <param name="suffix" type="string" optional="true"/>
+ </params>
+<code>/* Cast column vectors to series and add to list.
+return: list, column vectors as list */
+list L
+string suffix = exists(suffix) ? suffix : &quot;&quot;
+loop i=1..cols(m)
+  list L += genseries(sprintf(&quot;%s%s&quot;, cnameget(m)[i], suffix), m[,i])
+endloop
+return L
+</code>
+</gretl-function>
+<gretl-function name="add_info_criteria" type="void" private="1">
+ <params count="1">
+  <param name="self" type="bundleref"/>
+ </params>
+<code>/* Add information criteria
+return: void */
+strings names = defarray(&quot;aic&quot;, &quot;bic&quot;, &quot;hqc&quot;, &quot;aicc&quot;)
+matrix cr = criteria(self.ess, self.T, rows(self.coeff))
+loop foreach i names
+  scalar self[&quot;$i&quot;] = cr[i]
+endloop
+</code>
+</gretl-function>
 <gretl-function name="fmols_est" type="bundle" private="1">
  <params count="3">
   <param name="ys" type="series" const="true"/>
@@ -461,21 +515,24 @@ delta_g |= zeros((k + 1), 1)    # this is &quot;M*&quot;
 # Clean &quot;y&quot;
 series mask = 1
 smpl full
-matrix B.ystar = ys - self.srun_innovations * g
+matrix ystar = ys - self.srun_innovations * g
 smpl mask == 1 --restrict
+B.t1 = $t1
+B.t2 = $t2
+B.T = $nobs
 # Cointegrating vector based on clean &quot;y&quot;
 matrix m_xlist_deter = {xlist_deter}
 matrix xxi = invpd(m_xlist_deter'm_xlist_deter)
-matrix bhat = xxi * (m_xlist_deter'B.ystar - delta_g)
-matrix B.bhat_coint = bhat[1:n_xlist]
-matrix B.bhat_deter = bhat[(n_xlist + 1):]
+matrix B.coeff = xxi * (m_xlist_deter'ystar - delta_g)
 #  Covariance matrix
 matrix sg = (self.omega[1,1] - self.omega[1,2:n_yxlist] * g) / $nobs
 matrix B.vcv = xxi * sg
-matrix se = sqrt(diag(B.vcv))
-matrix B.se_coint = se[1:n_xlist]
-matrix B.se_deter = se[(n_xlist + 1):]
-matrix B.uhat = ys - {xlist_deter} * bhat
+matrix B.stderr = sqrt(diag(B.vcv))
+series yhat = {xlist_deter} * B.coeff
+series B.yhat = yhat
+series B.uhat = ys - B.yhat
+scalar B.ess = sst(B.uhat)
+scalar B.sigma = sd(B.uhat)
 return B
 </code>
 </gretl-function>
@@ -546,7 +603,7 @@ bundle model = FMOLS(LRM, xlist)
 print model
 
 # Store and plot error-correction term
-series ec_fmols = model.ec
+series ec_fmols = model.uhat
 list EC = ec_ols ec_fmols
 gnuplot EC --with-lines --time-series --output=display \
   { set title 'Error-correction term'; }

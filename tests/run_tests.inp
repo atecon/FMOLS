@@ -5,6 +5,7 @@ set assert stop
 include assertion.gfn
 
 include "./src/FMOLS.inp" --force
+include criteria.gfn
 
 
 bundles Params = null
@@ -73,12 +74,11 @@ Parameters = Parameters + _(type_deterministic = "c",\
                             do_prewhite = TRUE,\
                             type_kernel = "quadratic",\
                             verbose = FALSE,\
-                            expected_b2 = {3.78441},\
-                            expected_b1 = {1.38237; 3.89836},\
+                            expected_coeff = {1.38237; 3.89836; 3.78441},\
                             expected_v_vec = {0.016688; -0.025723;\
                                             -0.10105; 0.0000; 0.19511;\
                                             0.16602; 0.0000; 0.0000; 0.61259},\
-                            expected_sd_uhat = 0.0494721\
+                            expected_sigma = 0.0494721\
                             )
 
 Parameters = Parameters + _(type_deterministic = "ct",\
@@ -86,8 +86,7 @@ Parameters = Parameters + _(type_deterministic = "ct",\
                             do_prewhite = FALSE,\
                             type_kernel = "parzen",\
                             verbose = FALSE,\
-                            expected_b2 = {2.4678; -0.0012935},\
-                            expected_b1 = {1.6023; 3.7797},\
+                            expected_coeff = {1.6023; 3.7797; 2.4678; -0.0012935},\
                             expected_v_vec = {0.016817; -0.0054788;\
                                               -0.10045; -5.6127e-05;\
                                               0.0000; 0.10797; 0.039773;\
@@ -95,7 +94,7 @@ Parameters = Parameters + _(type_deterministic = "ct",\
                                               0.0000; 0.60052; 0.00033044;\
                                               0.0000; 0.0000; 0.0000;\
                                               3.8357e-07},\
-                            expected_sd_uhat = 0.0467072\
+                            expected_sigma = 0.0467072\
                             )
 function void test_FMOLS (const bundles P, const series y, const list L)
     print "Start testing FMOLS()."
@@ -111,20 +110,15 @@ function void test_FMOLS (const bundles P, const series y, const list L)
         matrix v_vec = vec(lower(model.vcv))
 
         # Then
-        loop j=1..rows(model.bhat_coint)
-            assert_almost_equal_num(model.bhat_coint[j],\
-                                    P[i].expected_b1[j], 1e-4)
-        endloop
-
-        loop j=1..rows(model.bhat_deter)
-            assert_almost_equal_num(model.bhat_deter[j],\
-                                    P[i].expected_b2[j], 1e-5)
+        loop j=1..rows(model.coeff)
+            assert_almost_equal_num(model.coeff[j],\
+                                    P[i].expected_coeff[j], 1e-4)
         endloop
 
         loop j=1..rows(v_vec)
             assert_almost_equal_num(v_vec[j], P[i].expected_v_vec[j], 1e-3)
         endloop
-        assert_almost_equal_num(sd(model.uhat), P[i].expected_sd_uhat, 1e-5)
+        assert_almost_equal_num(sd(model.uhat), P[i].expected_sigma, 1e-5)
     endloop
 end function
 test_FMOLS(Parameters, LRM, xlist)
