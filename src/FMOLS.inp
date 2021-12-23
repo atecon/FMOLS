@@ -11,11 +11,13 @@ function matrix timepoly (int T[1::],
         matrix trend = seq((1 - even - hT), hT)'
         ret ~= trend.^seq(1, maxpower)
 
-        loop i=1..maxpower
-            clabels = clabels + sprintf("trend_pow_%d", $i)
-        endloop
+	if maxpower > 0
+	    clabels += "trend"
+	endif
+	if maxpower > 1
+	    clabels += "qtrend"
+	endif
     endif
-
     cnameset(ret, clabels)
 
     return ret
@@ -232,7 +234,8 @@ end function
 
 function series get_longrun_innovations (const series y "Endogenous in levels",
                                          const list xlist "levels + deterministics")
-    /* Compute long-run coefficient vector and return residuals which are equivalent to deviations from long-run relationship.
+    /* Compute long-run coefficient vector and return residuals which \
+	are equivalent to deviations from long-run relationship.
     return: series, residuals */
 
     smpl y xlist --no-missing
@@ -245,14 +248,12 @@ end function
 
 
 function matrix est_var_model (const matrix m,
-                               const int max_lag[1::],
                                matrix *uhat)
     /* Estimate a VAR model by mols(). Return coefficient matrix. */
 
-    scalar init = 1 + max_lag      # get rid of initial NAs
+    scalar init = 2      # get rid of initial NAs
     scalar T = rows(m)
-    matrix p = seq(1, max_lag)
-    matrix m_lags = mlag(m, p, NA)[init:,]
+    matrix m_lags = mlag(m, 1, NA)[init:,]
 
     matrix bhat = mols( m[init:,], m_lags, &uhat )
     errorif($error, "Pre-whitening failed. Abort.")
@@ -270,7 +271,6 @@ function bundle fmols_defaults (void)
     string B.type_dgp_x = "c"
     string B.type_kernel = "quadratic"
     scalar B.do_prewhite = TRUE
-    scalar B.prewhitening_lag = 1
     scalar B.bandwidth = -1
     scalar B.verbose = TRUE
 
@@ -280,14 +280,16 @@ end function
 
 function scalar get_trend_powermax (const string type)
     /* Map deterministics to maximum degree (power) of trend variable. */
+    ret = NA
+    if type == "c"
+	ret = 0
+    elif type == "ct"
+	ret = 1
+    elif type == "ctt"
+	ret = 2
+    endif
 
-    bundle map = _(\
-                        c = 0,\
-                        ct = 1,\
-                        ctt = 2\
-                    )
-
-    return map[type]
+    return ret
 end function
 
 
@@ -310,11 +312,13 @@ function list matrix_to_list (const matrix m,
     /* Cast column vectors to series and add to list.
     return: list, column vectors as list */
 
+### This function will be superseded by a native one soon.
     list L
     string suffix = exists(suffix) ? suffix : ""
 
     loop i=1..cols(m)
-        list L += genseries(sprintf("%s%s", cnameget(m)[i], suffix), m[,i])
+	string sername = fixname(cnameget(m)[i])
+        list L += genseries(sprintf("%s%s", sername, suffix), m[,i])
     endloop
 
     return L
@@ -343,8 +347,7 @@ function bundle FMOLS (const series ys,
     add_column_dimensions(xlist, &self)
 
     list det_dynamics
-    matrix mtmp = timepoly($nobs,\
-                           get_trend_powermax(self.type_deterministic))
+    matrix mtmp = timepoly($nobs, get_trend_powermax(self.type_deterministic))
     list det_levels = matrix_to_list(mtmp)
 
 
@@ -372,8 +375,7 @@ function bundle FMOLS (const series ys,
 
     if self.do_prewhite             # Pre-white residuals using VAR(p)
         matrix innovations_white
-        matrix coeff_white = est_var_model(innovations, self.prewhitening_lag,\
-                                           &innovations_white)
+        matrix coeff_white = est_var_model(innovations, &innovations_white)
     else
         matrix innovations_white = innovations
     endif
@@ -423,7 +425,34 @@ function bundle FMOLS (const series ys,
     return model
 end function
 
+function bundle FMOLS_GUI(const series y "dependent variable",
+			  const list X "explanatory variables",
+			  int dety[0:2:0] "deterministics for dep. var." {"Constant", "Trend", \
+									  "Quadratic"},
+			  int detx[0:2:0] "deterministics for indep. var." {"Constant", "Trend", \
+									    "Quadratic"},
+			  int kernel[1:3:1] "kernel type" {"Quadratic", "Parzen", "Bartlett"},
+			  int bwidth[-1::-1] "Bandwidth (-1 = automatic)",
+			  bool prewhite[1] "Perform VAR(1) prewhitening?",
+			  bool verbose[1] "Show results")
 
+    bundle opts = defbundle("do_prewhite", prewhite, "bandwidth", bwidth , "verbose", verbose)
+    opts.type_deterministic = substr("ctt", 1, dety + 1)
+    opts.type_dgp_x = substr("ctt", 1, detx + 1)
+    opts.bandwidth = bwidth
+    
+    if kernel == 1
+	opts.type_kernel = "quadratic"
+    elif kernel == 2
+	opts.type_kernel = "parzen"
+    elif kernel == 3
+	opts.type_kernel = "bartlett"
+    endif
+
+    ret = FMOLS(y, X, opts)
+    return ret
+end function
+    
 function void add_info_criteria (bundle *self)
     /* Add information criteria
     return: void */

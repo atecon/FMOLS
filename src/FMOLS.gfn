@@ -3,7 +3,7 @@
 <gretl-function-package name="FMOLS" minver="2020c">
 <author email="stefano.fachin@uniroma1.it">Stefano Fachin, Riccardo &quot;Jack&quot; Lucchetti and Artur Tarassow</author>
 <version>2.0</version>
-<date>2021-06-26</date>
+<date>2021-12-23</date>
 <description>Fully Modified Least Squares Estimation for I(1) variables</description>
 <tags>C13 C52</tags>
 <help>
@@ -78,13 +78,16 @@ verbose:
 
 The returned bundle contains:
 =============================
-    coeff:      matrix, Estimates of the estimated coefficients
+    coeff:      matrix, Estimates of the estimated (by FMOLS) long-run
+                coefficients
     stderr:     matrix, Standard error of the coefficients
     vcv:        matrix, Square matrix containing the estimated covariance matrix
                 for the coefficients
     sigma:      scalar, Standard error of the regression
     df:         int, Degrees of freedom
-    uhat:       series, Estimated residuals
+    uhat:       series, Estimated FMOLS-based residuals which are defined as
+                uhat(t) = y(t) - x(t)*b where b is the vector of long-run
+                coefficients
     yhat:       series, Fitted values
     T:          int, Number of valid observations used
     t1:         int, Index of the initial observation used for estimation
@@ -153,7 +156,7 @@ matrix innovations = {lrun_innovations} ~ self.srun_innovations
 matrix vcv_innovations = innovations'innovations
 if self.do_prewhite             # Pre-white residuals using VAR(p)
   matrix innovations_white
-  matrix coeff_white = est_var_model(innovations, self.prewhitening_lag, &amp;innovations_white)
+  matrix coeff_white = est_var_model(innovations, &amp;innovations_white)
 else
   matrix innovations_white = innovations
 endif
@@ -192,6 +195,54 @@ endif
 return model
 </code>
 </gretl-function>
+<gretl-function name="FMOLS_GUI" type="bundle" pkg-role="gui-main">
+ <params count="8">
+  <param name="y" type="series" const="true">
+<description>dependent variable</description>
+  </param>
+  <param name="X" type="list" const="true">
+<description>explanatory variables</description>
+  </param>
+  <param name="dety" type="int" min="0" max="2" default="0">
+<description>deterministics for dep. var.</description>
+<labels count="3">
+"Constant" "Trend" "Quadratic" </labels>
+  </param>
+  <param name="detx" type="int" min="0" max="2" default="0">
+<description>deterministics for indep. var.</description>
+<labels count="3">
+"Constant" "Trend" "Quadratic" </labels>
+  </param>
+  <param name="kernel" type="int" min="1" max="3" default="1">
+<description>kernel type</description>
+<labels count="3">
+"Quadratic" "Parzen" "Bartlett" </labels>
+  </param>
+  <param name="bwidth" type="int" min="-1" default="-1">
+<description>Bandwidth (-1 = automatic)</description>
+  </param>
+  <param name="prewhite" type="bool" default="1">
+<description>Perform VAR(1) prewhitening?</description>
+  </param>
+  <param name="verbose" type="bool" default="1">
+<description>Show results</description>
+  </param>
+ </params>
+<code>bundle opts = defbundle(&quot;do_prewhite&quot;, prewhite, &quot;bandwidth&quot;, bwidth , &quot;verbose&quot;, verbose)
+opts.type_deterministic = substr(&quot;ctt&quot;, 1, dety + 1)
+opts.type_dgp_x = substr(&quot;ctt&quot;, 1, detx + 1)
+opts.bandwidth = bwidth
+if kernel == 1
+  opts.type_kernel = &quot;quadratic&quot;
+elif kernel == 2
+  opts.type_kernel = &quot;parzen&quot;
+elif kernel == 3
+  opts.type_kernel = &quot;bartlett&quot;
+endif
+ret = FMOLS(y, X, opts)
+return ret
+</code>
+</gretl-function>
 <gretl-function name="timepoly" type="matrix" private="1">
  <params count="2">
   <param name="T" type="int" min="1"/>
@@ -205,9 +256,12 @@ if maxpower &gt; 0
   scalar even = T % 2
   matrix trend = seq((1 - even - hT), hT)'
   ret ~= trend.^seq(1, maxpower)
-  loop i=1..maxpower
-    clabels = clabels + sprintf(&quot;trend_pow_%d&quot;, $i)
-  endloop
+  if maxpower &gt; 0
+    clabels += &quot;trend&quot;
+  endif
+  if maxpower &gt; 1
+    clabels += &quot;trend^2&quot;
+  endif
 endif
 cnameset(ret, clabels)
 return ret
@@ -411,7 +465,8 @@ return u
 <description>levels + deterministics</description>
   </param>
  </params>
-<code>/* Compute long-run coefficient vector and return residuals which are equivalent to deviations from long-run relationship.
+<code>/* Compute long-run coefficient vector and return residuals which \
+are equivalent to deviations from long-run relationship.
 return: series, residuals */
 smpl y xlist --no-missing
 catch ols y xlist --quiet
@@ -420,16 +475,14 @@ return $uhat
 </code>
 </gretl-function>
 <gretl-function name="est_var_model" type="matrix" private="1">
- <params count="3">
+ <params count="2">
   <param name="m" type="matrix" const="true"/>
-  <param name="max_lag" type="int" min="1" const="true"/>
   <param name="uhat" type="matrixref"/>
  </params>
 <code>/* Estimate a VAR model by mols(). Return coefficient matrix. */
-scalar init = 1 + max_lag      # get rid of initial NAs
+scalar init = 2      # get rid of initial NAs
 scalar T = rows(m)
-matrix p = seq(1, max_lag)
-matrix m_lags = mlag(m, p, NA)[init:,]
+matrix m_lags = mlag(m, 1, NA)[init:,]
 matrix bhat = mols( m[init:,], m_lags, &amp;uhat )
 errorif($error, &quot;Pre-whitening failed. Abort.&quot;)
 return bhat
@@ -442,7 +495,6 @@ string B.type_deterministic = &quot;c&quot;
 string B.type_dgp_x = &quot;c&quot;
 string B.type_kernel = &quot;quadratic&quot;
 scalar B.do_prewhite = TRUE
-scalar B.prewhitening_lag = 1
 scalar B.bandwidth = -1
 scalar B.verbose = TRUE
 return B
@@ -453,8 +505,15 @@ return B
   <param name="type" type="string" const="true"/>
  </params>
 <code>/* Map deterministics to maximum degree (power) of trend variable. */
-bundle map = _( c = 0, ct = 1, ctt = 2 )
-return map[type]
+ret = NA
+if type == &quot;c&quot;
+  ret = 0
+elif type == &quot;ct&quot;
+  ret = 1
+elif type == &quot;ctt&quot;
+  ret = 2
+endif
+return ret
 </code>
 </gretl-function>
 <gretl-function name="format_type_strings" type="void" private="1">
@@ -476,10 +535,12 @@ endloop
  </params>
 <code>/* Cast column vectors to series and add to list.
 return: list, column vectors as list */
+### This function will be superseded by a native one soon.
 list L
 string suffix = exists(suffix) ? suffix : &quot;&quot;
 loop i=1..cols(m)
-  list L += genseries(sprintf(&quot;%s%s&quot;, cnameget(m)[i], suffix), m[,i])
+  string sername = fixname(cnameget(m)[i])
+  list L += genseries(sprintf(&quot;%s%s&quot;, sername, suffix), m[,i])
 endloop
 return L
 </code>
