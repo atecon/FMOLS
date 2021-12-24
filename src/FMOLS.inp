@@ -40,6 +40,7 @@ end function
 
 function string msg_prewhiten (const bool do_prewhite)
     /* For printing only. */
+
     if do_prewhite
         return " Pre-Whitened"
     else
@@ -127,7 +128,7 @@ end function
 
 
 function scalar bwidth (const string type_kernel,
-                        int T,
+                        int T[1::],
                         const matrix ae,
                         const matrix se,
                         const scalar ad)
@@ -280,13 +281,15 @@ end function
 
 function scalar get_trend_powermax (const string type)
     /* Map deterministics to maximum degree (power) of trend variable. */
-    ret = NA
+
+    scalar ret = NA
+
     if type == "c"
-	ret = 0
+	   ret = 0
     elif type == "ct"
-	ret = 1
+	   ret = 1
     elif type == "ctt"
-	ret = 2
+	   ret = 2
     endif
 
     return ret
@@ -294,7 +297,7 @@ end function
 
 
 function void format_type_strings (bundle *self)
-    /* Format specific string values
+    /* Format specific string values.
     return: void */
 
     strings keys = defarray("type_deterministic",\
@@ -312,13 +315,13 @@ function list matrix_to_list (const matrix m,
     /* Cast column vectors to series and add to list.
     return: list, column vectors as list */
 
-### This function will be superseded by a native one soon.
+    # TODO: This function will be superseded by a native one soon.
     list L
     string suffix = exists(suffix) ? suffix : ""
 
     loop i=1..cols(m)
-	string sername = fixname(cnameget(m)[i])
-        list L += genseries(sprintf("%s%s", sername, suffix), m[,i])
+	   string sername = fixname(cnameget(m)[i])
+       list L += genseries(sprintf("%s%s", sername, suffix), m[,i])
     endloop
 
     return L
@@ -425,6 +428,7 @@ function bundle FMOLS (const series ys,
     return model
 end function
 
+
 function bundle FMOLS_GUI(const series y "dependent variable",
 			  const list X "explanatory variables",
 			  int dety[0:2:0] "deterministics for dep. var." {"Constant", "Trend", \
@@ -450,9 +454,11 @@ function bundle FMOLS_GUI(const series y "dependent variable",
     endif
 
     ret = FMOLS(y, X, opts)
+
     return ret
 end function
     
+
 function void add_info_criteria (bundle *self)
     /* Add information criteria
     return: void */

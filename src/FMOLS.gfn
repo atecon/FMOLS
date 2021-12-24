@@ -3,9 +3,11 @@
 <gretl-function-package name="FMOLS" minver="2020c">
 <author email="stefano.fachin@uniroma1.it">Stefano Fachin, Riccardo &quot;Jack&quot; Lucchetti and Artur Tarassow</author>
 <version>2.0</version>
-<date>2021-12-23</date>
+<date>2021-12-24</date>
 <description>Fully Modified Least Squares Estimation for I(1) variables</description>
 <tags>C13 C52</tags>
+<label>FMOLS estimation with I(1) series</label>
+<menu-attachment>MAINWIN/Model/LinearModels</menu-attachment>
 <help>
 This function carries out Fully Modified Least Squares (FMLS) estimation.
 It is essentially a translation (with permission) of the Gauss procedure
@@ -105,7 +107,7 @@ The returned bundle contains:
 
 Changelog:
 ==========
-v2.0 (June 2021):
+v2.0 (December 2021):
   - Refactored code
   - Improved and new user-interface with an option to pass bundle of
     parameters.
@@ -260,7 +262,7 @@ if maxpower &gt; 0
     clabels += &quot;trend&quot;
   endif
   if maxpower &gt; 1
-    clabels += &quot;trend^2&quot;
+    clabels += &quot;qtrend&quot;
   endif
 endif
 cnameset(ret, clabels)
@@ -352,7 +354,7 @@ return map[name]
 <gretl-function name="bwidth" type="scalar" private="1">
  <params count="5">
   <param name="type_kernel" type="string" const="true"/>
-  <param name="T" type="int"/>
+  <param name="T" type="int" min="1"/>
   <param name="ae" type="matrix" const="true"/>
   <param name="se" type="matrix" const="true"/>
   <param name="ad" type="scalar" const="true"/>
@@ -505,7 +507,7 @@ return B
   <param name="type" type="string" const="true"/>
  </params>
 <code>/* Map deterministics to maximum degree (power) of trend variable. */
-ret = NA
+scalar ret = NA
 if type == &quot;c&quot;
   ret = 0
 elif type == &quot;ct&quot;
@@ -520,7 +522,7 @@ return ret
  <params count="1">
   <param name="self" type="bundleref"/>
  </params>
-<code>/* Format specific string values
+<code>/* Format specific string values.
 return: void */
 strings keys = defarray(&quot;type_deterministic&quot;, &quot;type_dgp_x&quot;, &quot;type_kernel&quot; )
 loop foreach i keys
@@ -535,7 +537,7 @@ endloop
  </params>
 <code>/* Cast column vectors to series and add to list.
 return: list, column vectors as list */
-### This function will be superseded by a native one soon.
+# TODO: This function will be superseded by a native one soon.
 list L
 string suffix = exists(suffix) ? suffix : &quot;&quot;
 loop i=1..cols(m)
