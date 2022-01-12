@@ -27,9 +27,9 @@ Input parameters
 Return: Bundle holding various information; see below.
 
 
-The FMOLS() function is executed with some default parameter values.
-The user, however, can overwrite the following parameters by passing the
-'opts' bundle:
+The FMOLS() function, both in scripting and GUI mode, is executed with some default parameter 
+values. In scripting mode the user, however, can overwrite the following parameters 
+by passing the 'opts' bundle:
 ==============================================================================
 type_deterministic:
             string, Select the deterministic to be included.
