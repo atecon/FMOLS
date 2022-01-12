@@ -28,7 +28,7 @@ Return: Bundle holding various information; see below.
 
 
 The FMOLS() function, both in scripting and GUI mode, is executed with some default parameter 
-values. In scripting mode the user, however, can overwrite the following parameters 
+values. In GUI mode these can be overriden using the pull-down menus, and in scripting mode  
 by passing the 'opts' bundle:
 ==============================================================================
 type_deterministic:
