@@ -71,6 +71,14 @@ function matrix get_stats (const bundle self)
 end function
 
 
+function string capitalize (string s)
+    /* Convert the first character of the string 's' to a capital (uppercase).
+    return: string, First character of 's' in the capital.*/
+
+    return toupper(s[1]) ~ substr(s, 2, nelem(s))
+end function
+
+
 function void print_results (const bundle model)
     /* Print estimation results. */
 
@@ -81,7 +89,7 @@ function void print_results (const bundle model)
 
     string msg_type_dgp_x = msg_type_dgp_x(model.type_dgp_x)
     string msg_whiten = msg_prewhiten(model.do_prewhite)
-    string msg_kernel = sprintf(" %s", toupper(model.type_kernel))
+    string msg_kernel = sprintf(" %s", capitalize(model.type_kernel))
 
     if model.bandwidth == -1
         msg_band = sprintf("(automatic) estimate: %5.3g\n", model.bandwidth_value)
