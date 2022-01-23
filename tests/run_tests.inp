@@ -12,16 +12,22 @@ bundles Params = null
 Params = Params + _(type_kernel = "quadratic", expected = 1)
 Params = Params + _(type_kernel = "parzen", expected = 2)
 Params = Params + _(type_kernel = "bartlett", expected = 3)
+Params = Params + _(type_kernel = "foo", expected = 47)
 
 function void test_get_kernel_id (const bundles P)
     print "Start testing get_kernel_id()."
 
     loop foreach i P
         # Given + When
-        actual = get_kernel_id(P[i].type_kernel)
+        catch scalar actual = get_kernel_id(P[i].type_kernel)
+        scalar err = $error
 
         # Then
-        assert(actual == P[i].expected)
+        if err
+            assert(err == P[i].expected)
+        else
+            assert(actual == P[i].expected)
+        endif
     endloop
 end function
 test_get_kernel_id(Params)
@@ -125,8 +131,8 @@ test_FMOLS(Parameters, LRM, xlist)
 
 
 
-function void test_format_type_strings (void)
-    print "Start testing function format_type_strings()"
+function void test_type_strings_tolower (void)
+    print "Start testing function type_strings_tolower()"
 
     # Given
     bundle actual = _(type_deterministic = "DeT",\
@@ -138,15 +144,66 @@ function void test_format_type_strings (void)
                        type_kernel = "quadratic")
 
     # When
-    format_type_strings(&actual)
+    type_strings_tolower(&actual)
 
     # Then
     loop foreach i actual
         assert(actual["$i"] == expected["$i"])
     endloop
 end function
-test_format_type_strings()
+test_type_strings_tolower()
 
+
+nulldata 3 --preserve
+series y1 = normal()
+series y2 = y1
+y2[1] = NA
+series y3 = y1
+y3[2] = NA
+list L = y1 y2 y3
+
+bundles Params = null
+Params = Params + _(endog = "y1", expected_err = FALSE,\
+                    expected_t1 = 1, expected_t2 = $nobs)
+Params = Params + _(endog = "y2", expected_err = FALSE,\
+                    expected_t1 = 2, expected_t2 = $nobs)
+Params = Params + _(endog = "y3", expected_err = 47)
+
+function void test_check_sample (const bundles P, const list L)
+    print "Start testing check_sample()."
+
+    loop foreach i P
+        # Given
+        string vname = P[i].endog
+        list Input = L.@vname
+
+        # When
+        catch bundle actual = check_sample(Input, _(verbose = 1))
+        scalar err = $error
+
+        # Then
+        if err
+            assert(err == P[i].expected_err)
+        else
+            assert(actual.t1 == P[i].expected_t1)
+            assert(actual.t2 == P[i].expected_t2)
+        endif
+    endloop
+end function
+test_check_sample(Params, L)
+
+
+# ===================================
+# ADD unit tests for these functions.
+# ===================================
+
+function void test_bwidth (void)
+    print "No test for function bwidth(), yet"
+    # Given
+    # When
+    # Then
+end function
+test_bwidth()
 
 
 print "Finished all tests succesfully."

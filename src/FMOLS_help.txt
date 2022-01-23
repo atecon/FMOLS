@@ -27,44 +27,43 @@ Input parameters
 Return: Bundle holding various information; see below.
 
 
-The FMOLS() function, both in scripting and GUI mode, is executed with some default parameter 
-values. In GUI mode these can be overridden using the pull-down menus, and in scripting mode
-by passing the 'opts' bundle:
+The FMOLS() function, both in scripting and GUI mode, is executed with some
+default parameter values.
+In GUI mode these can be overridden using the pull-down menus, and in scripting
+mode by passing the 'opts' bundle:
 ==============================================================================
 type_deterministic:
-            string, Select the deterministic to be included.
-                    Options are:
-                    "c": include a constant (default)
-                    "ct": include a constant and linear trend
-                    "ctt": include a constant, linear and quadratic trend
+    string, Select the deterministic which is believed to be
+    describing the stochastic process of the endogenous.
+        Options are:
+        "c": include a constant (default)
+        "ct": include a constant and linear trend
+        "ctt": include a constant, linear and quadratic trend
 
 type_dgp_x:
-            string, Select the deterministic which is believed to be
-            describing the stochastic process of the regressors "x".
-            Options are:
-                    "c": include a constant (default)
-                    "ct": include a constant and linear trend
-                    "ctt": include a constant, linear and quadratic trend
+    string, Select the deterministic which is believed to be
+    describing the stochastic process of the regressors "x".
+    Options are:
+        "c": include a constant (default)
+        "ct": include a constant and linear trend
+        "ctt": include a constant, linear and quadratic trend
 
 do_prewhite:
-            boolean, Perform VAR(1) pre-whitening when calculating
-            covariances of 1 (=TRUE), otherwise not.
-
-prewhitening_lag:
-            int, Lag-length of the VAR(p) for pre-whitening (default p=1)
+    boolean, Perform VAR(1) pre-whitening when calculating covariances if 1
+    (=TRUE), otherwise not.
 
 type_kernel:
-            string, Select the kernel method. Options are:
-                     "quadratic": Quadratic Spectral kernel (default)
-                     "parzen": Parzen kernel
-                     "bartlett": Bartlett kernel
+    string, Select the kernel method. Options are:
+        "quadratic": Quadratic Spectral kernel (default)
+        "parzen": Parzen kernel
+        "bartlett": Bartlett kernel
 bandwidth:
-           scalar, Bandwidth for covariance calculation. The special value
-           -1 triggers Andrews' (1991) automatic bandwidth selection. A
-           VAR(1) model is used to calculate the automatic bandwidth.
+   scalar, Bandwidth for covariance calculation. The special value -1 triggers
+   Andrews' (1991) automatic bandwidth selection. A VAR(1) model is used to
+   calculate the automatic bandwidth.
 
 verbose:
-           boolean, Print any output if 1 (=TRUE) (default), otherwise not.
+   boolean, Print any output if 1 (=TRUE, default), otherwise not.
 
 
 The returned bundle contains:
