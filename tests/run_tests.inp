@@ -8,6 +8,56 @@ include "./src/FMOLS.inp" --force
 include criteria.gfn
 
 
+
+
+bundles Params = null
+Params = Params + _(key = "nc", expected = -1)
+Params = Params + _(key = "c", expected = 0)
+Params = Params + _(key = "ct", expected = 1)
+Params = Params + _(key = "ctt", expected = 2)
+
+function void test_deterministic_to_id_map (const bundles P)
+    print "Start testing deterministic_to_id_map()."
+
+    loop foreach i P
+        # Given + When
+        bundle B = deterministic_to_id_map()
+        catch scalar actual = B[P[i].key]
+        scalar err = $error
+
+        # Then
+        if !err
+            assert(actual == P[i].expected)
+        endif
+    endloop
+end function
+test_deterministic_to_id_map(Params)
+
+
+bundles Params = null
+Params = Params + _(type_kernel = "quadratic", expected = 1)
+Params = Params + _(type_kernel = "parzen", expected = 2)
+Params = Params + _(type_kernel = "bartlett", expected = 3)
+Params = Params + _(type_kernel = "foo")
+
+function void test_kernel_label_to_id_map (const bundles P)
+    print "Start testing kernel_label_to_id_map()."
+
+    loop foreach i P
+        # Given + When
+        bundle B = kernel_label_to_id_map()
+        catch scalar actual = B[P[i].type_kernel]
+        scalar err = $error
+
+        # Then
+        if !err
+            assert(actual == P[i].expected)
+        endif
+    endloop
+end function
+test_kernel_label_to_id_map(Params)
+
+
 bundles Params = null
 Params = Params + _(type_kernel = "quadratic", expected = 1)
 Params = Params + _(type_kernel = "parzen", expected = 2)
@@ -31,6 +81,32 @@ function void test_get_kernel_id (const bundles P)
     endloop
 end function
 test_get_kernel_id(Params)
+
+
+
+bundle Input = _(\
+                    quadratic = 1,\
+                    parzen = 2,\
+                    bartlett = 3\
+                )
+bundles Params = null
+Params = Params + _(expected = "quadratic", value = 1)
+Params = Params + _(expected = "parzen", value = 2)
+Params = Params + _(expected = "bartlett", value = 3)
+Params = Params + _(expected = "", value = 99)
+
+function void test_num_value_to_str_key (const bundle Input, const bundles P)
+    print "Start testing num_value_to_str_key()."
+
+    loop foreach i P
+        # Given + When
+        string actual = num_value_to_str_key(Input, P[i].value)
+
+        # Then
+        assert(actual == P[i].expected)
+    endloop
+end function
+test_num_value_to_str_key(Input, Params)
 
 
 bundles Params = null

@@ -35,7 +35,7 @@ mode by passing the 'opts' bundle:
 type_deterministic:
     string, Select the deterministic which is believed to be
     describing the stochastic process of the endogenous.
-        Options are:
+    Options are:
         "c": include a constant (default)
         "ct": include a constant and linear trend
         "ctt": include a constant, linear and quadratic trend

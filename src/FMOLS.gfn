@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gretl-functions>
-<gretl-function-package name="FMOLS" minver="2020c">
+<gretl-function-package name="FMOLS" minver="2021a">
 <author email="stefano.fachin@uniroma1.it">Stefano Fachin, Riccardo &quot;Jack&quot; Lucchetti and Artur Tarassow</author>
 <version>2.0</version>
-<date>2021-01-22</date>
+<date>2022-01-29</date>
 <description>Fully Modified Least Squares Estimation for I(1) variables</description>
 <tags>C13 C52</tags>
 <label>FMOLS estimation with I(1) series</label>
@@ -38,44 +38,46 @@ Input parameters
 Return: Bundle holding various information; see below.
 
 
-The FMOLS() function, both in scripting and GUI mode, is executed with some default parameter 
-values. In GUI mode these can be overridden using the pull-down menus, and in scripting mode
-by passing the 'opts' bundle:
+The FMOLS() function, both in scripting and GUI mode, is executed with some
+default parameter values.
+In GUI mode these can be overridden using the pull-down menus, and in scripting
+mode by passing the 'opts' bundle:
 ==============================================================================
 type_deterministic:
-            string, Select the deterministic to be included.
-                    Options are:
-                    &quot;c&quot;: include a constant (default)
-                    &quot;ct&quot;: include a constant and linear trend
-                    &quot;ctt&quot;: include a constant, linear and quadratic trend
+    string, Select the deterministic which is believed to be
+    describing the stochastic process of the endogenous.
+    Options are:
+        &quot;c&quot;: include a constant (default)
+        &quot;ct&quot;: include a constant and linear trend
+        &quot;ctt&quot;: include a constant, linear and quadratic trend
 
 type_dgp_x:
-            string, Select the deterministic which is believed to be
-            describing the stochastic process of the regressors &quot;x&quot;.
-            Options are:
-                    &quot;c&quot;: include a constant (default)
-                    &quot;ct&quot;: include a constant and linear trend
-                    &quot;ctt&quot;: include a constant, linear and quadratic trend
+    string, Select the deterministic which is believed to be
+    describing the stochastic process of the regressors &quot;x&quot;.
+    Options are:
+        &quot;nc&quot;: x is assumed to be I(1) with no drift (differences of x have zero
+              mean)
+        &quot;c&quot;:  x is assumed to be I(1) with drift (differences of x have non-zero
+              mean) (default)
+        &quot;ct&quot;: x is assumed to be I(1)  with a trending drift (differences of x
+              have a trend)
 
 do_prewhite:
-            boolean, Perform VAR(1) pre-whitening when calculating
-            covariances of 1 (=TRUE), otherwise not.
-
-prewhitening_lag:
-            int, Lag-length of the VAR(p) for pre-whitening (default p=1)
+    boolean, Perform VAR(1) pre-whitening when calculating covariances if 1
+    (=TRUE), otherwise not.
 
 type_kernel:
-            string, Select the kernel method. Options are:
-                     &quot;quadratic&quot;: Quadratic Spectral kernel (default)
-                     &quot;parzen&quot;: Parzen kernel
-                     &quot;bartlett&quot;: Bartlett kernel
+    string, Select the kernel method. Options are:
+        &quot;quadratic&quot;: Quadratic Spectral kernel (default)
+        &quot;parzen&quot;: Parzen kernel
+        &quot;bartlett&quot;: Bartlett kernel
 bandwidth:
-           scalar, Bandwidth for covariance calculation. The special value
-           -1 triggers Andrews' (1991) automatic bandwidth selection. A
-           VAR(1) model is used to calculate the automatic bandwidth.
+   scalar, Bandwidth for covariance calculation. The special value -1 triggers
+   Andrews' (1991) automatic bandwidth selection. A VAR(1) model is used to
+   calculate the automatic bandwidth.
 
 verbose:
-           boolean, Print any output if 1 (=TRUE) (default), otherwise not.
+   boolean, Print any output if 1 (=TRUE, default), otherwise not.
 
 
 The returned bundle contains:
@@ -129,28 +131,35 @@ bundle self = fmols_defaults()
 if exists(opts)
   self = opts + self
 endif
-format_type_strings(&amp;self)
+errorif(get_trend_powermax(self.type_deterministic) &lt; 0, &quot;The assumed deterministic for the endogenous must include at least a constant. Please adapt parameter 'type_deterministic'.&quot;)
+type_strings_tolower(&amp;self)
 string self.name_endogenous = argname(ys)
 string self.names_xlist = varname(xlist)
-self = self + check_sample(deflist(ys, xlist))
+self = self + check_sample(deflist(ys, xlist), self)
 smpl self.t1 self.t2
 scalar self.T = $nobs
 add_column_dimensions(xlist, &amp;self)
-list det_dynamics
 matrix mtmp = timepoly($nobs, get_trend_powermax(self.type_deterministic))
 list det_levels = matrix_to_list(mtmp)
 # one observation lost due to differencing of level series
-smpl (self.t1+1) ;
+smpl (self.t1 + 1) ;
+list det_dynamics
 matrix mtmp = timepoly($nobs, get_trend_powermax(self.type_dgp_x))
 list det_dynamics = matrix_to_list(mtmp, &quot;_dyn&quot;)
+# TODO: At some point matrix_to_list() can be replaced by gretl's internal mat2list() function introduced in 2022a
 # OLS regression of levels + deterministics
 list xlist_deter = xlist det_levels
 smpl (self.t1 + 1) ;
 series lrun_innovations = get_longrun_innovations(ys, xlist_deter)
+# TODO: get_longrun_innovations() may be replaced by gretl's internal lrvar()
 # Construct errors of dynamics: Has (T-1) observations due to differencing
 # Note: ols command not applicable as xlist can have multiple columns
 smpl full
-matrix self.srun_innovations = get_shortrun_innovations(xlist, det_dynamics)
+if nelem(det_dynamics)  # if type_dgp_x != &quot;nc&quot;
+  matrix self.srun_innovations = get_shortrun_innovations(xlist, det_dynamics)
+else
+  matrix self.srun_innovations = {diff(xlist)}
+endif
 smpl (self.t1 + 1) ;
 matrix xdx = {xlist_deter}'self.srun_innovations
 # Concatenate errors
@@ -205,17 +214,17 @@ return model
   <param name="X" type="list" const="true">
 <description>explanatory variables</description>
   </param>
-  <param name="dety" type="int" min="0" max="2" default="0">
-<description>deterministics for dep. var.</description>
+  <param name="type_deterministic" type="int" min="0" max="2" default="0">
+<description>Deterministics for dep. var.</description>
 <labels count="3">
-"Constant" "Trend" "Quadratic" </labels>
+"Constant" "Linear trend" "Quadratic trend" </labels>
   </param>
-  <param name="detx" type="int" min="0" max="2" default="0">
-<description>deterministics for indep. var.</description>
+  <param name="type_dgp_x" type="int" min="-1" max="1" default="0">
+<description>Deterministics for indep. var.</description>
 <labels count="3">
-"Constant" "Trend" "Quadratic" </labels>
+"No constant" "Constant" "Linear trend" </labels>
   </param>
-  <param name="kernel" type="int" min="1" max="3" default="1">
+  <param name="kernel_id" type="int" min="1" max="3" default="1">
 <description>kernel type</description>
 <labels count="3">
 "Quadratic" "Parzen" "Bartlett" </labels>
@@ -230,27 +239,38 @@ return model
 <description>Show results</description>
   </param>
  </params>
-<code>bundle opts = defbundle(&quot;do_prewhite&quot;, prewhite, &quot;bandwidth&quot;, bwidth , &quot;verbose&quot;, verbose)
-opts.type_deterministic = substr(&quot;ctt&quot;, 1, dety + 1)
-opts.type_dgp_x = substr(&quot;ctt&quot;, 1, detx + 1)
+<code>bundle opts = _(do_prewhite = prewhite, bandwidth = bwidth, verbose = verbose)
+opts.type_deterministic = num_value_to_str_key(deterministic_to_id_map(), type_deterministic)
+opts.type_dgp_x = num_value_to_str_key(deterministic_to_id_map(), type_dgp_x)
 opts.bandwidth = bwidth
-if kernel == 1
-  opts.type_kernel = &quot;quadratic&quot;
-elif kernel == 2
-  opts.type_kernel = &quot;parzen&quot;
-elif kernel == 3
-  opts.type_kernel = &quot;bartlett&quot;
-endif
+opts.type_kernel = num_value_to_str_key(kernel_label_to_id_map(), kernel_id)
 ret = FMOLS(y, X, opts)
 return ret
 </code>
 </gretl-function>
 <gretl-function name="timepoly" type="matrix" private="1">
  <params count="2">
-  <param name="T" type="int" min="1"/>
-  <param name="maxpower" type="int" min="0"/>
+  <param name="T" type="int" min="1" const="true"/>
+  <param name="maxpower" type="int" min="-1" const="true"/>
  </params>
-<code>/* Compute constant and (non-)linear trend. */
+<code>/* Compute constant and (non-)linear trend.
+Parameters:
+T: number of observations
+maxpower:-1 = no constant
+0 = constant
+1 = linear trend
+2 = quadratic trend
+return: A matrix holding the requested deterministics.
+maxpower ==-1: empty matrix
+maxpower == 0: T by 1 matrix with ones
+maxpower == 1: T by 2 matrix with ones and linear trend
+maxpower == 2: T by 3 matrix with ones linear and quadratic  trend
+*/
+if maxpower == -1
+  matrix ret = {}
+  colnames(ret, &quot;none&quot;)
+  return ret
+endif
 strings clabels = defarray(&quot;intercept&quot;)
 matrix ret = ones(T, 1)
 if maxpower &gt; 0
@@ -274,10 +294,12 @@ return ret
   <param name="type" type="string" const="true"/>
  </params>
 <code>/* Map selected type to unique ID. */
-if type == &quot;c&quot;
+if type == &quot;nc&quot;
+  ret = &quot; No constant&quot;
+elif type == &quot;c&quot;
   ret = &quot; Constant&quot;
 elif type == &quot;ct&quot;
-  ret = &quot; Constant and trend&quot;
+  ret = &quot; Constant and linear trend&quot;
 elif type == &quot;ctt&quot;
   ret = &quot; Constant, linear and quadratic trend&quot;
 endif
@@ -351,13 +373,38 @@ modprint coeff_se label stats
 print  &quot;======================================================================&quot;
 </code>
 </gretl-function>
+<gretl-function name="num_value_to_str_key" type="string" private="1">
+ <params count="2">
+  <param name="B" type="bundle" const="true"/>
+  <param name="value" type="scalar" const="true"/>
+ </params>
+<code>/* Access key of a bundle via some UNIQUE scalar. This is just the opposite
+procedure to what is usually done: access a value via key.
+return: string, Name of the associated key. If not key exists for the 'value', return an empty string. */
+loop foreach i B
+  scalar id = B[&quot;$i&quot;]
+  if id == value
+    return &quot;$i&quot;
+  endif
+endloop
+return &quot;&quot;
+</code>
+</gretl-function>
+<gretl-function name="kernel_label_to_id_map" type="bundle" private="1">
+<code>/* Map kernel label to unique ID.
+return: bundle, Mapping kernel label (key) to ID (value). */
+bundle B = _( quadratic = 1, parzen = 2, bartlett = 3 )
+return B
+</code>
+</gretl-function>
 <gretl-function name="get_kernel_id" type="scalar" private="1">
  <params count="1">
-  <param name="name" type="string" const="true"/>
+  <param name="type_kernel" type="string" const="true"/>
  </params>
 <code>/* Map kernel type to unique ID. */
-bundle map = _( quadratic = 1, parzen = 2, bartlett = 3 )
-return map[name]
+catch scalar id = kernel_label_to_id_map()[type_kernel]
+errorif($error, sprintf(&quot;Kernel type '%s' not known. Abort.&quot;, type_kernel))
+return id
 </code>
 </gretl-function>
 <gretl-function name="bwidth" type="scalar" private="1">
@@ -378,8 +425,6 @@ elif get_kernel_id(type_kernel) == 2     # Parzen
 elif get_kernel_id(type_kernel) == 3     # Bartlett
   scalar coeff_white = 4 * ( sumc((ae.*se./(((1-ae).^3).*(1+ae))).^2) )' / ad
   eband = 1.1447 * ( (coeff_white * T)^(1/3) )
-else
-  funcerr sprintf(&quot;Kernel type '%s' not known. Abort.&quot;, type_kernel)
 endif
 return eband
 </code>
@@ -425,17 +470,21 @@ return vec(kernel_est)
 </code>
 </gretl-function>
 <gretl-function name="check_sample" type="bundle" private="1">
- <params count="1">
+ <params count="2">
   <param name="L" type="list" const="true"/>
+  <param name="self" type="bundle" const="true"/>
  </params>
 <code>/*  Check for missing values and return sample start and end observations.*/
 scalar Told = $nobs
-smpl L --contiguous
+catch smpl L --contiguous
+errorif($error, &quot;ERROR: Your dataset has missing values in between for some of your variables. Abort.&quot;)
 scalar Tnew = $nobs
 scalar Tdiff = Told - Tnew
 if Tdiff &amp;&amp; self.verbose
-  printf &quot;\nWARNING: Dropped %d observations due to missing values.\n&quot;, Tdiff
-  printf &quot;\nINFO: Sample range: %s to %s.\n&quot;, obslabe($t1), obslabe($t2)
+  printf &quot;\nWARNING: Dropped %d observations due to missing values.&quot;,Tdiff
+endif
+if self.verbose
+  printf &quot;\nINFO: Sample range: %s to %s.\n&quot;, obslabel($t1), obslabel($t2)
 endif
 return _(t1 = $t1, t2 = $t2)
 </code>
@@ -511,23 +560,22 @@ scalar B.verbose = TRUE
 return B
 </code>
 </gretl-function>
+<gretl-function name="deterministic_to_id_map" type="bundle" private="1">
+<code>/* Map label of deterministic type to unique ID.
+return: bundle, Mapping label of deterministic (key) to ID (value). */
+bundle B = _( nc = -1, c = 0, ct = 1, ctt = 2 )
+return B
+</code>
+</gretl-function>
 <gretl-function name="get_trend_powermax" type="scalar" private="1">
  <params count="1">
   <param name="type" type="string" const="true"/>
  </params>
 <code>/* Map deterministics to maximum degree (power) of trend variable. */
-scalar ret = NA
-if type == &quot;c&quot;
-  ret = 0
-elif type == &quot;ct&quot;
-  ret = 1
-elif type == &quot;ctt&quot;
-  ret = 2
-endif
-return ret
+return deterministic_to_id_map()[&quot;@type&quot;]
 </code>
 </gretl-function>
-<gretl-function name="format_type_strings" type="void" private="1">
+<gretl-function name="type_strings_tolower" type="void" private="1">
  <params count="1">
   <param name="self" type="bundleref"/>
  </params>
