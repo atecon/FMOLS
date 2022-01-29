@@ -1,6 +1,26 @@
-function matrix timepoly (int T[1::],
-                          int maxpower[0::])
-    /* Compute constant and (non-)linear trend. */
+function matrix timepoly (const int T[1::],
+                          const int maxpower[-1::])
+    /* Compute constant and (non-)linear trend.
+    Parameters:
+        T: number of observations
+        maxpower:-1 = no constant
+                  0 = constant
+                  1 = linear trend
+                  2 = quadratic trend
+
+
+    return: A matrix holding the requested deterministics.
+            maxpower ==-1: empty matrix
+            maxpower == 0: T by 1 matrix with ones
+            maxpower == 1: T by 2 matrix with ones and linear trend
+            maxpower == 2: T by 3 matrix with ones linear and quadratic  trend
+    */
+
+    if maxpower == -1
+        matrix ret = {}
+        colnames(ret, "none")
+        return ret
+    endif
 
     strings clabels = defarray("intercept")
     matrix ret = ones(T, 1)
@@ -11,25 +31,28 @@ function matrix timepoly (int T[1::],
         matrix trend = seq((1 - even - hT), hT)'
         ret ~= trend.^seq(1, maxpower)
 
-	if maxpower > 0
-	    clabels += "trend"
-	endif
-	if maxpower > 1
-	    clabels += "qtrend"
-	endif
+    	if maxpower > 0
+    	    clabels += "trend"
+    	endif
+    	if maxpower > 1
+    	    clabels += "qtrend"
+    	endif
     endif
     cnameset(ret, clabels)
 
     return ret
 end function
 
+
 function string msg_type_dgp_x (const string type)
     /* Map selected type to unique ID. */
 
-    if type == "c"
+    if type == "nc"
+        ret = " No constant"
+    elif type == "c"
         ret = " Constant"
     elif type == "ct"
-        ret = " Constant and trend"
+        ret = " Constant and linear trend"
     elif type == "ctt"
         ret = " Constant, linear and quadratic trend"
     endif
@@ -299,8 +322,10 @@ function scalar get_trend_powermax (const string type)
 
     scalar ret = NA
 
-    if type == "c"
-	   ret = 0
+    if type == "nc"
+	   ret = -1
+    elif type == "c"
+       ret = 0
     elif type == "ct"
 	   ret = 1
     elif type == "ctt"
@@ -354,6 +379,9 @@ function bundle FMOLS (const series ys,
         self = opts + self
     endif
 
+    errorif(get_trend_powermax(self.type_deterministic) < 0,\
+            "The assumed deterministic for the endogenous must include at least a constant. Please adapt parameter 'type_deterministic'.")
+
     type_strings_tolower(&self)
 
     string self.name_endogenous = argname(ys)
@@ -364,25 +392,31 @@ function bundle FMOLS (const series ys,
     scalar self.T = $nobs
     add_column_dimensions(xlist, &self)
 
-    list det_dynamics
     matrix mtmp = timepoly($nobs, get_trend_powermax(self.type_deterministic))
     list det_levels = matrix_to_list(mtmp)
 
-
     # one observation lost due to differencing of level series
-    smpl (self.t1+1) ;
+    smpl (self.t1 + 1) ;
+    list det_dynamics
     matrix mtmp = timepoly($nobs, get_trend_powermax(self.type_dgp_x))
     list det_dynamics = matrix_to_list(mtmp, "_dyn")
+    # TODO: At some point matrix_to_list() can be replaced by gretl's internal mat2list() function introduced in 2022a
 
     # OLS regression of levels + deterministics
     list xlist_deter = xlist det_levels
     smpl (self.t1 + 1) ;
     series lrun_innovations = get_longrun_innovations(ys, xlist_deter)
+    # TODO: get_longrun_innovations() may be replaced by gretl's internal lrvar()
 
     # Construct errors of dynamics: Has (T-1) observations due to differencing
     # Note: ols command not applicable as xlist can have multiple columns
     smpl full
-    matrix self.srun_innovations = get_shortrun_innovations(xlist, det_dynamics)
+    if nelem(det_dynamics)  # if type_dgp_x != "nc"
+        matrix self.srun_innovations = get_shortrun_innovations(xlist,\
+                                                                det_dynamics)
+    else
+        matrix self.srun_innovations = {diff(xlist)}
+    endif
 
     smpl (self.t1 + 1) ;
     matrix xdx = {xlist_deter}'self.srun_innovations

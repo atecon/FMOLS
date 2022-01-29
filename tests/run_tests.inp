@@ -34,6 +34,7 @@ test_get_kernel_id(Params)
 
 
 bundles Params = null
+Params = Params + _(type = "nc", expected = -1)
 Params = Params + _(type = "c", expected = 0)
 Params = Params + _(type = "ct", expected = 1)
 Params = Params + _(type = "ctt", expected = 2)
@@ -69,12 +70,68 @@ end function
 test_msg_prewhiten(Params)
 
 
+bundles Params = null
+Params = Params + _(T = 4, maxpower =-1, expected = {})
+Params = Params + _(T = 4, maxpower = 0, expected = ones(4, 1))
+Params = Params + _(T = 4, maxpower = 1,\
+                    expected = ones(4, 1) ~ {-1; 0; 1; 2})
+Params = Params + _(T = 4, maxpower = 2,\
+                    expected = ones(4, 1) ~ \
+                               {-1; 0; 1; 2} ~ \
+                               {1; 0; 1; 4}\
+                    )
+function void test_timepoly (const bundles P)
+    print "Start testing function timepoly()."
+
+    loop foreach i P
+        # Given
+        expected = vec(P[i].expected)
+
+        # When
+        matrix actual = timepoly(P[i].T, P[i].maxpower)
+        actual = vec(actual)
+
+        # Then
+        assert(nelem(actual) == nelem(expected))
+
+        if nelem(expected)
+            loop j=1..nelem(expected)
+                assert(actual[j] == expected[j])
+            endloop
+        endif
+    endloop
+end function
+test_timepoly(Params)
+
+
+
+bundles Params = null
+Params = Params + _(type ="nc", expected = " No constant")
+Params = Params + _(type ="c", expected = " Constant")
+Params = Params + _(type ="ct", expected = " Constant and linear trend")
+Params = Params + _(type ="ctt",\
+                    expected = " Constant, linear and quadratic trend")
+
+function void test_msg_type_dgp_x (const bundles P)
+    print "Start testing function msg_type_dgp_x()."
+
+    loop foreach i P
+        # Given + When
+        string actual = msg_type_dgp_x(P[i].type)
+        actual
+
+        # Then
+        assert(actual == P[i].expected)
+    endloop
+end function
+test_msg_type_dgp_x(Params)
 
 
 open denmark.gdt --quiet
 series spread = IDE - IBO
 list xlist = LRY spread
 bundles Parameters = null
+
 Parameters = Parameters + _(type_deterministic = "c",\
                             type_dgp_x = "c",\
                             do_prewhite = TRUE,\
@@ -102,29 +159,66 @@ Parameters = Parameters + _(type_deterministic = "ct",\
                                               3.8357e-07},\
                             expected_sigma = 0.0467072\
                             )
+
+Parameters = Parameters + _(type_deterministic = "c",\
+                            type_dgp_x = "nc",\
+                            do_prewhite = TRUE,\
+                            type_kernel = "quadratic",\
+                            verbose = FALSE,\
+                            expected_coeff = {1.38681; 3.86685; 3.75875},\
+                            expected_v_vec = {0.017108; -0.026370; -0.10359;\
+                                              0; 0.20002; 0.17020;\
+                                              0; 0; 0.62801},\
+                            expected_sigma = 0.04930167\
+                            )
+
+Parameters = Parameters + _(type_deterministic = "nc",\
+                            type_dgp_x = "nc",\
+                            do_prewhite = TRUE,\
+                            type_kernel = "quadratic",\
+                            verbose = FALSE,\
+                            expected_err = 47\
+                            )
+
+Parameters = Parameters + _(type_deterministic = "c",\
+                            type_dgp_x = "ct",\
+                            do_prewhite = TRUE,\
+                            type_kernel = "quadratic",\
+                            verbose = FALSE,\
+                            expected_coeff = {1.3248; 3.8060; 4.12132},\
+                            expected_v_vec = {0.017992; -0.027733; -0.10894;\
+                                              0; 0.21035; 0.17899;\
+                                              0; 0; 0.66045},\
+                            expected_sigma = 0.048613\
+                            )
+
 function void test_FMOLS (const bundles P, const series y, const list L)
     print "Start testing FMOLS()."
 
     loop foreach i P        # Given
+        print i
         bundle model = null
-        #string target = P[i].target
-        #string features = P[i].features
-        #list X = @features
 
         # When
-        model = FMOLS(y, L, P[i])
-        matrix v_vec = vec(lower(model.vcv))
+        catch model = FMOLS(y, L, P[i])
+        scalar err = $error
 
-        # Then
-        loop j=1..rows(model.coeff)
-            assert_almost_equal_num(model.coeff[j],\
-                                    P[i].expected_coeff[j], 1e-4)
-        endloop
+        if exists(P[i].expected_err)
+            assert(err == P[i].expected_err)
+        else
+            matrix v_vec = vec(lower(model.vcv))
 
-        loop j=1..rows(v_vec)
-            assert_almost_equal_num(v_vec[j], P[i].expected_v_vec[j], 1e-3)
-        endloop
-        assert_almost_equal_num(sd(model.uhat), P[i].expected_sigma, 1e-5)
+            # Then
+            loop j=1..rows(model.coeff)
+                assert_almost_equal_num(model.coeff[j],\
+                                        P[i].expected_coeff[j], 1e-4)
+            endloop
+
+            loop j=1..rows(v_vec)
+                assert_almost_equal_num(v_vec[j], P[i].expected_v_vec[j], 1e-3)
+            endloop
+            assert_almost_equal_num(model.sigma, P[i].expected_sigma, 1e-5)
+        endif
     endloop
 end function
 test_FMOLS(Parameters, LRM, xlist)
@@ -191,6 +285,30 @@ function void test_check_sample (const bundles P, const list L)
     endloop
 end function
 test_check_sample(Params, L)
+
+
+function void test_fmols_defaults (void)
+    print "Start testing function fmols_defaults()"
+
+    # Given
+    bundle expected
+    expected.type_deterministic = "c"
+    expected.type_dgp_x = "c"
+    expected.type_kernel = "quadratic"
+    expected.do_prewhite = TRUE
+    expected.bandwidth = -1
+    expected.verbose = TRUE
+
+    # When
+    bundle actual = fmols_defaults()
+
+    # Then
+    loop foreach i expected
+        assert(actual["$i"] == expected["$i"])
+    endloop
+end function
+test_fmols_defaults()
+
 
 
 # ===================================

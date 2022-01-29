@@ -44,9 +44,12 @@ type_dgp_x:
     string, Select the deterministic which is believed to be
     describing the stochastic process of the regressors "x".
     Options are:
-        "c": include a constant (default)
-        "ct": include a constant and linear trend
-        "ctt": include a constant, linear and quadratic trend
+        "nc": x is assumed to be I(1) with no drift (differences of x have zero
+              mean)
+        "c":  x is assumed to be I(1) with drift (differences of x have non-zero
+              mean) (default)
+        "ct": x is assumed to be I(1)  with a trending drift (differences of x
+              have a trend)
 
 do_prewhite:
     boolean, Perform VAR(1) pre-whitening when calculating covariances if 1
