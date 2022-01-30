@@ -246,7 +246,7 @@ function matrix compute_kernel (int T[1::],
     elif get_kernel_id(type_kernel) == 3     #  Bartlett
         matrix kernel_est = (1-jb).*(jb .<= 1)
     else
-        funcerr sprintf("Kernel type '%s' is not known. Abort.", type_kernel)
+        errorif(TRUE, sprintf("Kernel type '%s' is not known. Abort.", type_kernel))
     endif
 
     return vec(kernel_est)
