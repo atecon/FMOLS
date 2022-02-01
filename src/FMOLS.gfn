@@ -3,7 +3,7 @@
 <gretl-function-package name="FMOLS" minver="2021a">
 <author email="stefano.fachin@uniroma1.it">Stefano Fachin, Riccardo &quot;Jack&quot; Lucchetti and Artur Tarassow</author>
 <version>2.0</version>
-<date>2022-01-29</date>
+<date>2022-02-01</date>
 <description>Fully Modified Least Squares Estimation for I(1) variables</description>
 <tags>C13 C52</tags>
 <label>FMOLS estimation with I(1) series</label>
@@ -103,13 +103,13 @@ The returned bundle contains:
     aicc:       scalar, corrected Akaike information criteria
     bic:        scalar, Schwarz information criteria
     hqc:        scalar, Hannan-Quinn information criteria
-    bandwidth_value:  scalar, value of (automatically selected) bandwidth
+    bandwidth:  scalar, value of (automatically selected) bandwidth
 
 
 
 Changelog:
 ==========
-v2.0 (January 2022):
+v2.0 (February 2022):
   - Refactored code
   - Improved and new user-interface with an option to pass bundle of
     parameters.
@@ -132,6 +132,7 @@ if exists(opts)
   self = opts + self
 endif
 errorif(get_trend_powermax(self.type_deterministic) &lt; 0, &quot;The assumed deterministic for the endogenous must include at least a constant. Please adapt parameter 'type_deterministic'.&quot;)
+errorif(self.bandwidth == 0, &quot;The bandwidth cannot be zero. Please adjust.&quot;)
 type_strings_tolower(&amp;self)
 string self.name_endogenous = argname(ys)
 string self.names_xlist = varname(xlist)
@@ -173,10 +174,10 @@ else
 endif
 scalar self.Teffective = rows(innovations_white)
 if self.bandwidth == -1
-  scalar self.bandwidth_value = compute_bandwidth(innovations_white, self.type_kernel)
+  scalar self.bandwidth = compute_bandwidth(innovations_white, self.type_kernel)
 endif
 # Estimate covariances
-matrix kernel_est = compute_kernel(self.Teffective, self.type_kernel, self.bandwidth_value)
+matrix kernel_est = compute_kernel(self.Teffective, self.type_kernel, self.bandwidth)
 matrix sigma = innovations_white'innovations_white
 # long-run covariance matrix
 matrix lambda = longrun_cov(kernel_est, innovations_white)
@@ -198,7 +199,6 @@ model.type_kernel = self.type_kernel
 model.type_dgp_x = self.type_dgp_x
 model.type_deterministic = self.type_deterministic
 model.do_prewhite = self.do_prewhite
-model.bandwidth_value = self.bandwidth_value
 model.bandwidth = self.bandwidth
 if self.verbose
   print_results(model)
@@ -229,7 +229,7 @@ return model
 <labels count="3">
 "Quadratic" "Parzen" "Bartlett" </labels>
   </param>
-  <param name="bwidth" type="int" min="-1" default="-1">
+  <param name="bandwidth" type="int" min="-1" default="-1">
 <description>Bandwidth (-1 = automatic)</description>
   </param>
   <param name="prewhite" type="bool" default="1">
@@ -239,10 +239,9 @@ return model
 <description>Show results</description>
   </param>
  </params>
-<code>bundle opts = _(do_prewhite = prewhite, bandwidth = bwidth, verbose = verbose)
+<code>bundle opts = _(do_prewhite = prewhite, bandwidth = bandwidth, verbose = verbose)
 opts.type_deterministic = num_value_to_str_key(deterministic_to_id_map(), type_deterministic)
 opts.type_dgp_x = num_value_to_str_key(deterministic_to_id_map(), type_dgp_x)
-opts.bandwidth = bwidth
 opts.type_kernel = num_value_to_str_key(kernel_label_to_id_map(), kernel_id)
 ret = FMOLS(y, X, opts)
 return ret
@@ -352,9 +351,9 @@ string msg_type_dgp_x = msg_type_dgp_x(model.type_dgp_x)
 string msg_whiten = msg_prewhiten(model.do_prewhite)
 string msg_kernel = sprintf(&quot; %s&quot;, capitalize(model.type_kernel))
 if model.bandwidth == -1
-  msg_band = sprintf(&quot;(automatic) estimate: %5.3g\n&quot;, model.bandwidth_value)
+  msg_band = sprintf(&quot;(automatic) estimate: %5.3g\n&quot;, model.bandwidth)
 else
-  msg_band = sprintf(&quot;preset at: %2.3g\n&quot;, model.bandwidth_value)
+  msg_band = sprintf(&quot;preset at: %2.3g\n&quot;, model.bandwidth)
 endif
 print  &quot;======================================================================&quot;
 print &quot;Cointegrating regression&quot;

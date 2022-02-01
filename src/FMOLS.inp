@@ -115,9 +115,9 @@ function void print_results (const bundle model)
     string msg_kernel = sprintf(" %s", capitalize(model.type_kernel))
 
     if model.bandwidth == -1
-        msg_band = sprintf("(automatic) estimate: %5.3g\n", model.bandwidth_value)
+        msg_band = sprintf("(automatic) estimate: %5.3g\n", model.bandwidth)
     else
-        msg_band = sprintf("preset at: %2.3g\n", model.bandwidth_value)
+        msg_band = sprintf("preset at: %2.3g\n", model.bandwidth)
     endif
 
     print  "======================================================================"
@@ -412,6 +412,8 @@ function bundle FMOLS (const series ys,
     errorif(get_trend_powermax(self.type_deterministic) < 0,\
             "The assumed deterministic for the endogenous must include at least a constant. Please adapt parameter 'type_deterministic'.")
 
+    errorif(self.bandwidth == 0, "The bandwidth cannot be zero. Please adjust.")
+
     type_strings_tolower(&self)
 
     string self.name_endogenous = argname(ys)
@@ -464,13 +466,13 @@ function bundle FMOLS (const series ys,
     scalar self.Teffective = rows(innovations_white)
 
     if self.bandwidth == -1
-        scalar self.bandwidth_value = compute_bandwidth(innovations_white,\
+        scalar self.bandwidth = compute_bandwidth(innovations_white,\
                                                          self.type_kernel)
     endif
 
     # Estimate covariances
     matrix kernel_est = compute_kernel(self.Teffective, self.type_kernel,\
-                                       self.bandwidth_value)
+                                       self.bandwidth)
     matrix sigma = innovations_white'innovations_white
 
     # long-run covariance matrix
@@ -497,7 +499,6 @@ function bundle FMOLS (const series ys,
     model.type_dgp_x = self.type_dgp_x
     model.type_deterministic = self.type_deterministic
     model.do_prewhite = self.do_prewhite
-    model.bandwidth_value = self.bandwidth_value
     model.bandwidth = self.bandwidth
 
     if self.verbose
@@ -609,19 +610,18 @@ function bundle FMOLS_GUI (const series y "dependent variable",
    int type_deterministic[0:2:0] "Deterministics for dep. var." {"Constant", "Linear trend", "Quadratic trend"},
    int type_dgp_x[-1:1:0] "Deterministics for indep. var." {"No constant", "Constant", "Linear trend"},
    int kernel_id[1:3:1] "kernel type" {"Quadratic", "Parzen", "Bartlett"},
-   int bwidth[-1::-1] "Bandwidth (-1 = automatic)",
+   int bandwidth[-1::-1] "Bandwidth (-1 = automatic)",
    bool prewhite[TRUE] "Perform VAR(1) prewhitening?",
    bool verbose[TRUE] "Show results")
 
     bundle opts = _(do_prewhite = prewhite,\
-                    bandwidth = bwidth,\
+                    bandwidth = bandwidth,\
                     verbose = verbose)
 
     opts.type_deterministic = num_value_to_str_key(deterministic_to_id_map(),\
                                                    type_deterministic)
     opts.type_dgp_x = num_value_to_str_key(deterministic_to_id_map(),\
                                            type_dgp_x)
-    opts.bandwidth = bwidth
     opts.type_kernel = num_value_to_str_key(kernel_label_to_id_map(), kernel_id)
 
     ret = FMOLS(y, X, opts)
