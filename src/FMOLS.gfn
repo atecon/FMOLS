@@ -2,8 +2,8 @@
 <gretl-functions>
 <gretl-function-package name="FMOLS" minver="2021a">
 <author email="stefano.fachin@uniroma1.it">Stefano Fachin, Riccardo &quot;Jack&quot; Lucchetti and Artur Tarassow</author>
-<version>2.0</version>
-<date>2022-02-01</date>
+<version>2.1</version>
+<date>2022-02-11</date>
 <description>Fully Modified Least Squares Estimation for I(1) variables</description>
 <tags>C13 C52</tags>
 <label>FMOLS estimation with I(1) series</label>
@@ -109,6 +109,8 @@ The returned bundle contains:
 
 Changelog:
 ==========
+v2.1 (February 2022):
+  - Fix potential bug when computing short-run innovations
 v2.0 (February 2022):
   - Refactored code
   - Improved and new user-interface with an option to pass bundle of
@@ -159,6 +161,7 @@ smpl full
 if nelem(det_dynamics)  # if type_dgp_x != &quot;nc&quot;
   matrix self.srun_innovations = get_shortrun_innovations(xlist, det_dynamics)
 else
+  smpl (self.t1 + 1) ;
   matrix self.srun_innovations = {diff(xlist)}
 endif
 smpl (self.t1 + 1) ;

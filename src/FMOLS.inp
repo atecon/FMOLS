@@ -447,6 +447,7 @@ function bundle FMOLS (const series ys,
         matrix self.srun_innovations = get_shortrun_innovations(xlist,\
                                                                 det_dynamics)
     else
+        smpl (self.t1 + 1) ;
         matrix self.srun_innovations = {diff(xlist)}
     endif
 
