@@ -18,7 +18,7 @@ function matrix timepoly (const int T[1::],
 
     if maxpower == -1
         matrix ret = {}
-        colnames(ret, "none")
+        cnameset(ret, "none")
         return ret
     endif
 

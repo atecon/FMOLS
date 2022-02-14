@@ -271,7 +271,7 @@ maxpower == 2: T by 3 matrix with ones linear and quadratic  trend
 */
 if maxpower == -1
   matrix ret = {}
-  colnames(ret, &quot;none&quot;)
+  cnameset(ret, &quot;none&quot;)
   return ret
 endif
 strings clabels = defarray(&quot;intercept&quot;)
