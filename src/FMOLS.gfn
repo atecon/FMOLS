@@ -3,11 +3,11 @@
 <gretl-function-package name="FMOLS" minver="2021a">
 <author email="stefano.fachin@uniroma1.it">Stefano Fachin, Riccardo &quot;Jack&quot; Lucchetti and Artur Tarassow</author>
 <version>2.1</version>
-<date>2022-02-11</date>
+<date>2022-02-14</date>
 <description>Fully Modified Least Squares Estimation for I(1) variables</description>
 <tags>C13 C52</tags>
 <label>FMOLS estimation with I(1) series</label>
-<menu-attachment>MAINWIN/Model/LinearModels</menu-attachment>
+<menu-attachment>MAINWIN/Model/TSModels</menu-attachment>
 <help>
 This function carries out Fully Modified Least Squares (FMLS) estimation.
 It is essentially a translation (with permission) of the Gauss procedure
@@ -111,6 +111,7 @@ Changelog:
 ==========
 v2.1 (February 2022):
   - Fix potential bug when computing short-run innovations
+  - Put GUI entry under &quot;Univariate time series&quot; menu
 v2.0 (February 2022):
   - Refactored code
   - Improved and new user-interface with an option to pass bundle of
