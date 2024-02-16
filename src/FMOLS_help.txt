@@ -74,6 +74,7 @@ The returned bundle contains:
     coeff:      matrix, Estimates of the estimated (by FMOLS) long-run
                 coefficients
     stderr:     matrix, Standard error of the coefficients
+    pvalue:     matrix, P-values of the estimated coefficients
     vcv:        matrix, Square matrix containing the estimated covariance matrix
                 for the coefficients
     sigma:      scalar, Standard error of the regression
@@ -98,6 +99,9 @@ The returned bundle contains:
 
 Changelog:
 ==========
+v2.2 (February 2024):
+  - Add p-values of coefficient estimates to output bundle
+  - Add dependency on string_utils package and replace some internal function
 v2.1 (February 2022):
   - Fix potential bug when computing short-run innovations
   - Put GUI entry under "Univariate time series" menu

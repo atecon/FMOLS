@@ -1,10 +1,8 @@
 clear
 set verbose off
-
 include FMOLS.gfn
 
 open denmark.gdt --quiet
-
 
 # Build some regressor(s)
 series spread = IDE - IBO

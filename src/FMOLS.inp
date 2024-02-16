@@ -94,14 +94,6 @@ function matrix get_stats (const bundle self)
 end function
 
 
-function string capitalize (string s)
-    /* Convert the first character of the string 's' to a capital (uppercase).
-    return: string, First character of 's' in the capital.*/
-
-    return toupper(s[1]) ~ substr(s, 2, nelem(s))
-end function
-
-
 function void print_results (const bundle model)
     /* Print estimation results. */
 
