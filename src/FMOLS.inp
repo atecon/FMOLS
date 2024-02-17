@@ -474,7 +474,7 @@ function bundle FMOLS (const series ys,
     model.type_deterministic = self.type_deterministic
     model.do_prewhite = self.do_prewhite
     model.bandwidth = self.bandwidth
-    model.pvalue = get_pvalues(model.coeff, model.stderr)
+    model.pvalue = 2 * pvalue(z, abs(model.coeff ./ model.stderr))
     rnameset(model.pvalue, model.parnames)
 
     if self.verbose
@@ -483,20 +483,6 @@ function bundle FMOLS (const series ys,
 
     return model
 end function
-
-
-function matrix get_pvalues (const matrix coeff, const matrix stderr)
-    /* Compute p-values. */
-
-    matrix pvalues = mshape(NA, nelem(coeff))
-
-    loop i=1..nelem(coeff)
-        pvalues[i] = 2 * pvalue(z, abs(coeff[i] ./ stderr[i]))
-    endloop
-
-    return pvalues
-end function
-
 
 
 function void add_info_criteria (bundle *self)
