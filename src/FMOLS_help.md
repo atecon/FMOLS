@@ -123,6 +123,7 @@ boolean, Print any output if 1 (=`TRUE`, default), otherwise not (=`FALSE`).
 * **v2.2 (February 2024)**
     * Move help to markdown format
     * Add p-values of coefficient estimates to output bundle
+    * Increase minimum version to Gretl 2022a
     * Add dependency on string_utils package and replace some internal function
 
 * **v2.1 (February 2022)**

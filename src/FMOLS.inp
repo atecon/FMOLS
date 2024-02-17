@@ -372,24 +372,6 @@ function void type_strings_tolower (bundle *self)
 end function
 
 
-function list matrix_to_list (const matrix m,
-                              string suffix[null])
-    /* Cast column vectors to series and add to list.
-    return: list, column vectors as list */
-
-    # TODO: This function will be superseded by a native one soon.
-    list L
-    string suffix = exists(suffix) ? suffix : ""
-
-    loop i=1..cols(m)
-	   string sername = fixname(cnameget(m)[i])
-       list L += genseries(sprintf("%s%s", sername, suffix), m[,i])
-    endloop
-
-    return L
-end function
-
-
 function bundle FMOLS (const series ys,
                        const list xlist,
                        const bundle opts[null])
@@ -417,14 +399,13 @@ function bundle FMOLS (const series ys,
     add_column_dimensions(xlist, &self)
 
     matrix mtmp = timepoly($nobs, get_trend_powermax(self.type_deterministic))
-    list det_levels = matrix_to_list(mtmp)
+    list det_levels = mat2list(mtmp)
 
     # one observation lost due to differencing of level series
     smpl (self.t1 + 1) ;
     list det_dynamics
     matrix mtmp = timepoly($nobs, get_trend_powermax(self.type_dgp_x))
-    list det_dynamics = matrix_to_list(mtmp, "_dyn")
-    # TODO: At some point matrix_to_list() can be replaced by gretl's internal mat2list() function introduced in 2022a
+    list det_dynamics = mat2list(mtmp, "dyn_")
 
     # OLS regression of levels + deterministics
     list xlist_deter = xlist det_levels
