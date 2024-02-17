@@ -58,7 +58,7 @@ Options are
 
 `do_prewhite`:
 
-boolean, Perform VAR(1) pre-whitening when calculating covariances if 1 (=`TRUE`), otherwise not (=`FALSE`).
+boolean, Perform VAR(1) pre-whitening when calculating covariances if 1 (=`TRUE`), otherwise not (=`FALSE`). Default is `TRUE`.
 
 `type_kernel`:
 
