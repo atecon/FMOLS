@@ -11,4 +11,4 @@ help = FMOLS_help.md
 sample-script = FMOLS_sample.inp
 label = FMOLS estimation with I(1) series
 menu-attachment = MAINWIN/Model/TSModels
-depends = criteria string_utils
+depends = criteria
