@@ -411,13 +411,12 @@ function bundle FMOLS (const series ys,
     list xlist_deter = xlist det_levels
     smpl (self.t1 + 1) ;
     series lrun_innovations = get_longrun_innovations(ys, xlist_deter)
-    # TODO: get_longrun_innovations() may be replaced by gretl's internal lrvar()
 
     # Construct errors of dynamics: Has (T-1) observations due to differencing
     # Note: ols command not applicable as xlist can have multiple columns
     smpl full
     if nelem(det_dynamics)  # if type_dgp_x != "nc"
-        matrix self.srun_innovations = get_shortrun_innovations(xlist,\
+        matrix self.srun_innovations = get_shortrun_innovations(xlist,
                                                                 det_dynamics)
     else
         smpl (self.t1 + 1) ;
@@ -440,17 +439,18 @@ function bundle FMOLS (const series ys,
     scalar self.Teffective = rows(innovations_white)
 
     if self.bandwidth == -1
-        scalar self.bandwidth = compute_bandwidth(innovations_white,\
-                                                         self.type_kernel)
+        scalar self.bandwidth = compute_bandwidth(innovations_white,
+                                                  self.type_kernel)
     endif
 
     # Estimate covariances
-    matrix kernel_est = compute_kernel(self.Teffective, self.type_kernel,\
+    matrix kernel_est = compute_kernel(self.Teffective, self.type_kernel,
                                        self.bandwidth)
     matrix sigma = innovations_white'innovations_white
 
     # long-run covariance matrix
     matrix lambda = longrun_cov(kernel_est, innovations_white)
+    # TODO: get_longrun_innovations() may be replaced by gretl's internal lrvar()
 
     matrix self.delta = sigma + lambda
     matrix self.omega = self.delta + lambda'
@@ -458,7 +458,7 @@ function bundle FMOLS (const series ys,
     if self.do_prewhite
         matrix ai
         matrix self.omega = recolor_omega(self.omega, coeff_white, &ai)
-        matrix self.delta = recolor_delta(self.delta, coeff_white, ai,\
+        matrix self.delta = recolor_delta(self.delta, coeff_white, ai,
                                           vcv_innovations)
     endif
 
@@ -509,10 +509,11 @@ function bundle fmols_est (const series ys,
     scalar n_yxlist = self.cols_mymx
     scalar n_xlist = self.cols_mx
 
-    matrix g = mols(self.omega[2:n_yxlist, 1],\
+    matrix g = mols(self.omega[2:n_yxlist, 1],
                     self.omega[2:n_yxlist, 2:n_yxlist])
 
-    matrix delta_g = self.delta[2:n_yxlist, 1] - self.delta[2:n_yxlist, 2:n_yxlist] * g
+    matrix delta_g = self.delta[2:n_yxlist, 1] - \
+                     self.delta[2:n_yxlist, 2:n_yxlist] * g
     scalar k = get_trend_powermax(self.type_deterministic)
     delta_g |= zeros((k + 1), 1)    # this is "M*"
 
@@ -561,7 +562,9 @@ function matrix recolor_omega (const matrix omega,
     /*  */
 
     ai = inv( I(cols(omega)) - coeff_white)
-    return qform(ai', omega)
+    matrix result = qform(ai', omega)
+
+    return result
 end function
 
 
