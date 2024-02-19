@@ -387,6 +387,46 @@ test_fmols_defaults()
 
 
 
+include FMOLS.gfn
+
+open denmark.gdt -q --preserve
+series spread = IDE - IBO
+list xlist = LRY spread
+
+# a nice simple case
+bundle opts = _(do_prewhite=0, type_kernel="bartlett", bandwidth=3)
+bundle model = FMOLS(LRM, xlist, opts)
+matrix g_out = model.coeff ~ model.stderr
+
+list L = LRM LRY spread
+foreign language=R --send-data=L
+    #install.packages("cointReg")
+   library(cointReg)
+   x <- cbind(gretldata[,"LRY"], gretldata[,"spread"])
+   y <- gretldata[,"LRM"]
+   deter <- 1
+   cm <- cointRegFM(x, y, deter, kernel="ba", bandwidth=3)
+   print(cm)
+   Rout <- cbind(as.matrix(cm$theta), as.matrix(cm$sd.theta))
+   gretl.export(Rout)
+end foreign
+
+tmp = mread("Rout.mat", 1)
+# re-order as per gretl's FMOLS
+R_out = tmp[{2,3,1},]
+
+matrix delta = vec(g_out .- R_out)
+rnameset(R_out, "LRY spread intercept")
+print g_out
+print R_out
+print "Test for equality"
+print delta
+loop i=1..rows(delta)
+    assert_almost_equal_num(delta[i], 0, 1e-1)
+endloop
+
+
+
 # ===================================
 # ADD unit tests for these functions.
 # ===================================
