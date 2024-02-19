@@ -51,7 +51,7 @@ Options are
 
 - `nc`: `x` is assumed to be I(1) with no drift (differences of `x` have zero mean)
 
-- `c`: `x` is assumed to be I(1) with drift (differences of `x` have non-zero    mean) (default)
+- `c`: `x` is assumed to be I(1) with drift (differences of `x` have non-zero mean) (default)
 
 - `ct`: `x` is assumed to be I(1)  with a trending drift (differences of `x` have a trend)
 
@@ -70,7 +70,7 @@ string, Select the kernel method. Options are:
 
 `bandwidth`:
 
-scalar, Bandwidth for covariance calculation. The special value `-1` triggers Andrews' (1991) automatic bandwidth selection. A VAR(1) model is used to calculate the automatic bandwidth.
+scalar, Bandwidth for covariance calculation. The special value `-1` (default) triggers Andrews' (1991) automatic bandwidth selection. A VAR(1) model is used to calculate the automatic bandwidth.
 
 `verbose`:
 boolean, Print any output if 1 (=`TRUE`, default), otherwise not (=`FALSE`).
@@ -124,7 +124,6 @@ boolean, Print any output if 1 (=`TRUE`, default), otherwise not (=`FALSE`).
     * Move help to markdown format
     * Add p-values of coefficient estimates to output bundle
     * Increase minimum version to Gretl 2022a
-    * Add dependency on string_utils package and replace some internal function
 
 * **v2.1 (February 2022)**
     * Fix potential bug when computing short-run innovations
