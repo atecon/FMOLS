@@ -450,7 +450,6 @@ function bundle FMOLS (const series ys,
 
     # long-run covariance matrix
     matrix lambda = longrun_cov(kernel_est, innovations_white)
-    # TODO: get_longrun_innovations() may be replaced by gretl's internal lrvar()
 
     matrix self.delta = sigma + lambda
     matrix self.omega = self.delta + lambda'
@@ -552,7 +551,10 @@ function matrix recolor_delta (const matrix delta,
                                const matrix ai,
                                const matrix vcv_innovations)
     /*  */
-    return ai'delta * ai - ai'(coeff_white'vcv_innovations)
+    matrix c1 = ai'delta*ai
+    matrix c2 = ai'(coeff_white'vcv_innovations)
+
+    return c1 - c2
 end function
 
 
