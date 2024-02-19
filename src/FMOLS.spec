@@ -1,7 +1,7 @@
 author = Stefano Fachin, Riccardo "Jack" Lucchetti and Artur Tarassow
 email = atecon@posteo.de
 version = 2.2
-date = 2024-02-16
+date = 2024-02-19
 description = Fully Modified Least Squares Estimation for I(1) variables
 tags = C13 C52
 min-version = 2022a
